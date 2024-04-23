@@ -4,3 +4,20 @@
 *.ptx
 *.cubin
 *.fatbin
+
+# cuda 程序 
+*.dat
+*.plt
+*.txt
+.*
+
+# 指定文件
+data
+flow
+!CoCurve_CSE_2.txt
+!CoCurve_PRM_2.txt
+!CoCurve_RRW_2.txt
+!CoCurve_RKE_2.txt
+!CoCurve_RKS_2.txt
+!CoCurve_VDW_2.txt
+!.gitignore
