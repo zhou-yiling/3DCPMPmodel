@@ -1,4 +1,6 @@
-#define CONTACTANGLE
+#define CONTACTANGLE	//接触角模型 _设置相应的流场
+#define PTCALCFIVEPOINT //五点差分计算化学势
+//#define PTCALCSEVENPOINT //七点差分计算化学势
 //#define DROPLETSPLASH
 
 #ifdef WIN32
@@ -458,11 +460,13 @@ __global__ void ChemPotential(char * Type, double * Dens, double * Pote)
 
 		Pote[I] = _T*log(Den / (D(1) - _B*Den)) - _A / (S2 * 2 * _B)*log((S2 - 1 + _B*Den) / (S2 + 1 - _B*Den)) + _T / (D(1) - _B*Den) - _A*Den / (D(1) + _B*Den * 2 - Sq(_B*Den));
 
-		 Define_ijk7;
-		 Pote[I] = Sq(_K) * Pote[I] - _Ka * GradD7(Dens); 
-
-		//Define_ijk5;
-		//Pote[I] = Sq(_K) * Pote[I] - _Ka * GradD5(Dens);
+#ifdef PTCALCFIVEPOINT
+		Define_ijk5;
+		Pote[I] = Sq(_K) * Pote[I] - _Ka * GradD5(Dens);
+#elif PTCALCSEVENPOINT
+		Define_ijk7;
+		Pote[I] = Sq(_K) * Pote[I] - _Ka * GradD7(Dens); 
+#endif
 	}
 }
 
@@ -1671,7 +1675,6 @@ void CalcMacroCPU()
 void ShowData()
 {
 	
-#ifdef CONTACTANGLE	/*------------------------------------计算接触角相关------------------------------------*/
     if (NowStep == 0) 
 	{
         cout << "程序参数设置：" << endl;
@@ -1682,12 +1685,22 @@ void ShowData()
             << "    K=" << K 
             << "    BasePt=" << BasePt 
             << endl;
+
+#ifdef CONTACTANGLE	/*------------------------------------计算接触角相关------------------------------------*/
         //液滴的位置
         // cout << "LiquidDrop Position: " 
         //     << "    X=" << DropletPosX 
         //     << "    Y=" << DropletPosY 
         //     << "    Z=" << DropletPosZ 
         //     << endl;
+
+		//化学势计算方式：
+		cout << "ChemicalPotential Calculation Method: ";
+#ifdef PTCALCFIVEPOINT   //五点
+			cout << "FivePoint" << endl;
+#elif PTCALCSEVENPOINT //七点
+			cout << "SevenPoint" << endl;
+#endif
 
         cout << endl;
 
