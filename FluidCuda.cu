@@ -123,7 +123,6 @@ void Initialize()
 	K1 = 0; 
 	K2 = -K1;
 	BasePt = 0.08;//-0.06(30.572°)   -0.04(49.094°)     0.02(91.975°)   0.072(120.107°)    0.082(124.678°)    0.112(137.039°)   0.132(143.795°)   0.15(149.187°)   0.18(160.378°)
-	
 	BasePt2 = -0.08;//-0.08;
 	Radius = 60;
 	Width = 10;
@@ -1700,6 +1699,8 @@ void ShowData()
 			cout << "FivePoint" << endl;
 #elif PTCALCSEVENPOINT //七点
 			cout << "SevenPoint" << endl;
+#else
+			cout << "Error:  Please define the Pote calculation method!" << endl;
 #endif
 
         cout << endl;
