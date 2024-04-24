@@ -657,11 +657,10 @@ void DataShowSave()
 
 		//
 		//for (int i = int((Px[4] + Px[5]) / 2 + 0.5), j = 2; j < DY - 2; ++j)//原 int i = int((Px[2] + Px[3]) / 2 + 0.5)
-		//for (int i = int((Px[4] + Px[5]) / 2 + 0.5), j = 2; j < DZ - 2; ++j)//原 int i = int((Px[2] + Px[3]) / 2 + 0.5)
-		for (int i = int((Px[2] + Px[3]) / 2 + 0.5), j = 2; j < DZ - 2; ++j)//原 int i = int((Px[2] + Px[3]) / 2 + 0.5)
+		for (int i = int((Px[4] + Px[5]) / 2 + 0.5), j = 2; j < DZ - 2; ++j)//原 int i = int((Px[2] + Px[3]) / 2 + 0.5)
 		{
 			double &t = TDen[i][j], &t1 = TDen[i][j + 1];
-			if (t >= MidDen && t1 < MidDen)   H = D(j) + (t - MidDen) / (t - t1) - (y0 + 1);//-(y0+1) 因为外推的高度是第一层流体点
+			if (t >= MidDen && t1 < MidDen)   H = D(j) + (t - MidDen) / (t - t1) - (y0);//-(y0+1) 因为外推的高度是第一层流体点
 		}
 
 		//当存在x_R - x_L为负数时，需要重新计算L，H
