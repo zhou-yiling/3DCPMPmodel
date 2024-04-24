@@ -1668,6 +1668,7 @@ void ShowData()
             << "    Ka=" << Ka 
             << "    K=" << K 
             << "    BasePt=" << BasePt 
+			<< "  	AllStep=" << AllStep
             << endl;
 
 		//化学势边界计算方式
