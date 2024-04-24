@@ -1,6 +1,9 @@
 #define CONTACTANGLE	//接触角模型 _设置相应的流场
 #define PTCALCFIVEPOINT //五点差分计算化学势
 //#define PTCALCSEVENPOINT //七点差分计算化学势
+//#define SIMPLECHEMBOUNDARY	 //简单化学势边界
+#define COMPLEXCHEMBOUNDARY	 //带梯度的化学势边界
+
 //#define DROPLETSPLASH
 
 #ifdef WIN32
@@ -107,8 +110,8 @@ void GetThickness(const double Dens[], double & Width);
 
 //*************************************************************************************************
 
-//dim3  DimBlock((DX*DY*DZ + 64 - 1) / 64); dim3 DimThread(64);
-dim3  DimBlock((DX*DY*DZ + 32 - 1) / 32); dim3 DimThread(32);
+dim3  DimBlock((DX*DY*DZ + 64 - 1) / 64); dim3 DimThread(64);
+//dim3  DimBlock((DX*DY*DZ + 32 - 1) / 32); dim3 DimThread(32);
 #define GridIndex   const int I = blockIdx.x*blockDim.x + threadIdx.x;
 #define LineIndex   const int i = I / DY / DZ,  j = (I / DZ) % DY,  k = I % DZ;
 
@@ -118,11 +121,11 @@ void Initialize()
 	MModel = MP_CPPRW;
 	Tau = 0.8; //Tau = 0.575;
 	Tr = 0.7;
-	K = 0.1;	//K = 0.1;	//计算三维液滴时取0.2;
+	K = 0.2;	//K = 0.1;	//计算三维液滴时取0.2;
 	Ka = 0.001;
 	K1 = 0; 
 	K2 = -K1;
-	BasePt = 0.08;//-0.06(30.572°)   -0.04(49.094°)     0.02(91.975°)   0.072(120.107°)    0.082(124.678°)    0.112(137.039°)   0.132(143.795°)   0.15(149.187°)   0.18(160.378°)
+	//BasePt = 0.08;//-0.06(30.572°)   -0.04(49.094°)     0.02(91.975°)   0.072(120.107°)    0.082(124.678°)    0.112(137.039°)   0.132(143.795°)   0.15(149.187°)   0.18(160.378°)
 	BasePt2 = -0.08;//-0.08;
 	Radius = 60;
 	Width = 10;
@@ -141,7 +144,7 @@ void Initialize()
 	TasKNum = 1;
 	ShowStep = 10000;
 	SaveStep = 10000;
-	AllStep = 10* 10000;
+	AllStep = 100 * 10000;
 	NowStep = StepTime = 0;
 	DropStep = 500;//7000
 	BeginTime = LastTime = GetMyTickCount();
@@ -157,6 +160,28 @@ void Initialize()
 															Ts[2] = Ts[10] = Ts[12] = 1.4; 	Ts[4] = Ts[6] = Ts[8] = 1.2;
 															Ts[16] = Ts[17] = Ts[18] = 1.98;
 															Ts[9] = Ts[11] = Ts[13] = Ts[14] = Ts[15] = 1.0/Tau;  //*/
+}
+
+void SetParameter()
+{
+	//cout << "SetParameter" << endl;
+	cudaMemcpyToSymbol(_K, &K, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_A, &A, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_B, &B, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_T, &T, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Ka, &Ka, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_K1, &K1, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_K2, &K2, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_DenG, &DenG, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_DenL, &DenL, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Tau, &Tau, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_ReTau, &ReTau, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_BasePt, &BasePt, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_BasePt2, &BasePt2, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Radius, &Radius, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Width, &Width, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Gravity, &Gravity, sizeof(double), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(_Ts, Ts, sizeof(double)*DQ, 0, cudaMemcpyHostToDevice);
 }
 
 
@@ -348,53 +373,20 @@ __global__ void MacroCalculate(char* Type, double* Dens, double* Dist, double* V
 
 
 //*************************************************************************************************
-__global__ void ChemBoundarySimple(char * Type, double * Dens, double * Pote)
+__global__ void ChemBoundary(char * Type, double * Dens, double * Pote)
 {
 	const int i = blockIdx.x, j = threadIdx.x;   const int I = i*DY*DZ + j*DZ;
 	const int i1 = (i>0 ? i - 1 : DX - 1), i2 = (i<DX - 1 ? i + 1 : 0), j1 = (j>0 ? j - 1 : DY - 1), j2 = (j<DY - 1 ? j + 1 : 0);
 
-	int kk = 3;// int kk = 2;
-
-	//Dens[I(i, j, 0)] = Dens[I(i, j, 1)] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
+	int kk = 3;
 	Dens[I] = Dens[I + 1] = Dens[I+2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-	//Pote[I] = Pote[I + 1] = (Pote[I(i, j, kk)] * 2 + Pote[I(i1, j1, kk)] + Pote[I(i1, j2, kk)] + Pote[I(i2, j1, kk)] + Pote[I(i2, j2, kk)]) / 6;
+
+	kk = DZ - 4;
+	Dens[I+DZ-3] = Dens[I + DZ - 1] = Dens[I + DZ - 2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
 
 	Pote[I] = Pote[I + 1] = Pote[I + 2] = Pote[I + DZ -3] = Pote[I + DZ - 2] = Pote[I + DZ - 1] = _BasePt;
 
-	kk = DZ - 4;// kk = DZ - 4;
-
-	//Dens[I(i, j, DZ - 1)] = Dens[I(i, j, DZ - 2)] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-	Dens[I+DZ-3] = Dens[I + DZ - 1] = Dens[I + DZ - 2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-	//Pote[I + DZ - 1] = Pote[I + DZ - 2] = (Pote[I(i, j, kk)] * 2 + Pote[I(i1, j1, kk)] + Pote[I(i1, j2, kk)] + Pote[I(i2, j1, kk)] + Pote[I(i2, j2, kk)]) / 6;
-	//Pote[I + DZ - 1] = Pote[I + DZ - 2] = _BasePt;
-
-	// kk = 2;
-	// Dens[I + 1] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-	// kk = DZ - 3;
-	// Dens[I + DZ - 2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-
-	// kk = 1;
-	// Dens[I] =  (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-	// kk = DZ - 2;
-	// Dens[I + DZ - 1] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-
-
-}
-
-__global__ void ChemBoundaryComplex(char * Type, double * Dens, double * Pote)
-{
-	const int i = blockIdx.x, j = threadIdx.x;   const int I = i*DY*DZ + j*DZ;
-	const int i1 = (i>0 ? i - 1 : DX - 1), i2 = (i<DX - 1 ? i + 1 : 0), j1 = (j>0 ? j - 1 : DY - 1), j2 = (j<DY - 1 ? j + 1 : 0);
-
-	int kk = 3;// int kk = 2;
-
-	Dens[I] = Dens[I + 1] = Dens[I+2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
-
-	Pote[I] = Pote[I + 1] = Pote[I + 2] = Pote[I + DZ -3] = Pote[I + DZ - 2] = Pote[I + DZ - 1] = _BasePt;
-
-	kk = DZ - 4;// kk = DZ - 4;
-
-	Dens[I+DZ-3] = Dens[I + DZ - 1] = Dens[I + DZ - 2] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
+#ifdef COMPLEXCHEMBOUNDARY
 
 	kk = 2;
 	Dens[I + 1] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
@@ -405,6 +397,7 @@ __global__ void ChemBoundaryComplex(char * Type, double * Dens, double * Pote)
 	Dens[I] =  (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
 	kk = DZ - 2;
 	Dens[I + DZ - 1] = (Dens[I(i, j, kk)] * 2 + Dens[I(i1, j1, kk)] + Dens[I(i1, j2, kk)] + Dens[I(i2, j1, kk)] + Dens[I(i2, j2, kk)]) / 6;
+#endif
 }
 
 // __global__ void ChemBoundaryComplex(char * Type, double * Dens, char CalcTargetLayerTag , char SourceDataLayerTag) 
@@ -1253,7 +1246,9 @@ void Save_interfaceDen()
 int main(int argc, char *argv[])
 {
 	DeviceQuery();
-	int DeviceNo = 1;
+	int DeviceNo;
+	cout << " Which GPU device do you want to use? ";  
+	cin.get(&DeviceNo); 
 	cudaSetDevice(DeviceNo); //cudaSetDevice(1);
 	cout << "  Now is running on GPU device " << DeviceNo << endl;
 
@@ -1267,14 +1262,9 @@ int main(int argc, char *argv[])
 		CudaInitialize();
 		SetFlowField << <DimBlock, DimThread >> > (Type, Dens, Pote, Dist, Temp);
 
-
-		for( BasePt = 0.04 ;BasePt <=0.08 ; BasePt += 0.005, No++)
+		for( BasePt = -0.08 ;BasePt <=-0.015 ; BasePt += 0.005, No++)
 		{
-			//AllStep = 50 * 10000;
-			cout << "BasePt = " << BasePt << endl;
-
-			if(No == 0) AllStep = 20 * 10000;			
-			else AllStep = 10 * 10000;
+			cout << "Now the BasePt = " << BasePt << endl;
 
 			cudaMemcpyToSymbol(_BasePt, &BasePt, sizeof(double));
 			cudaDeviceSynchronize();
@@ -1287,8 +1277,7 @@ int main(int argc, char *argv[])
 			{
 				dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
 				{
-					ChemBoundarySimple << <Block, Thread >> > (Type, Dens, Pote);
-					//ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, Pote);
+					ChemBoundary<< <Block, Thread >> > (Type, Dens, Pote);
 
 					// ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL1, FLUID);
 					// ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL2, LEVEL1);
@@ -1296,7 +1285,6 @@ int main(int argc, char *argv[])
 				
 					ChemPotential << <DimBlock, DimThread >> > (Type, Dens, Pote);
 				}
-
 
 				NonidealForce << <DimBlock, DimThread >> > (Type, Dens, Pote, Fx, Fy, Fz);
 				GlobalCollide << <DimBlock, DimThread >> > (Type, Dens, Pote, Dist, Temp, MVx, MVy, MVz, Vx, Vy, Vz, Fx, Fy, Fz);
@@ -1313,8 +1301,6 @@ int main(int argc, char *argv[])
 					ShowData();
 				}
 				if( NowStep == AllStep) SaveContactAngle();
-
-
 			}
 		}
 		CudaFree();
@@ -1673,7 +1659,7 @@ void CalcMacroCPU()
 
 void ShowData()
 {
-	
+	//打印表头	
     if (NowStep == 0) 
 	{
         cout << "程序参数设置：" << endl;
@@ -1685,14 +1671,12 @@ void ShowData()
             << "    BasePt=" << BasePt 
             << endl;
 
-#ifdef CONTACTANGLE	/*------------------------------------计算接触角相关------------------------------------*/
-        //液滴的位置
-        // cout << "LiquidDrop Position: " 
-        //     << "    X=" << DropletPosX 
-        //     << "    Y=" << DropletPosY 
-        //     << "    Z=" << DropletPosZ 
-        //     << endl;
-
+		//化学势边界计算方式
+#ifdef COMPLEXCHEMBOUNDARY
+		cout << "化学势边界条件：逐层计算" << endl;
+#else
+		cout << "化学势边界条件：多层设置为相同" << endl;
+#endif
 		//化学势计算方式：
 		cout << "ChemicalPotential Calculation Method: ";
 #ifdef PTCALCFIVEPOINT   //五点
@@ -1702,6 +1686,15 @@ void ShowData()
 #else
 			cout << "Error:  Please define the Pote calculation method!" << endl;
 #endif
+
+#ifdef CONTACTANGLE	/*------------------------------------计算接触角相关------------------------------------*/
+        //液滴的位置
+        // cout << "LiquidDrop Position: " 
+        //     << "    X=" << DropletPosX 
+        //     << "    Y=" << DropletPosY 
+        //     << "    Z=" << DropletPosZ 
+        //     << endl;
+
 
         cout << endl;
 
