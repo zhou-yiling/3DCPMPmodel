@@ -1245,9 +1245,9 @@ void Save_interfaceDen()
 int main(int argc, char *argv[])
 {
 	DeviceQuery();
-	int DeviceNo;
-	cout << " Which GPU device do you want to use? ";  
-	cin.get(&DeviceNo); 
+	int DeviceNo = *argv[1] - '0';
+	// cout << " Which GPU device do you want to use? ";  
+	// cin.get(&DeviceNo); 
 	cudaSetDevice(DeviceNo); //cudaSetDevice(1);
 	cout << "  Now is running on GPU device " << DeviceNo << endl;
 
@@ -1661,6 +1661,7 @@ void ShowData()
 	//打印表头	
     if (NowStep == 0) 
 	{
+		cout << "计算Pt-Chem曲线的亲水段数据" <<endl;
         cout << "程序参数设置：" << endl;
         cout << "Multiphase: " << Name(MModel) << "    DX=" << DX << "    DY=" << DY << "    DZ=" << DZ << "    Tau=" << Tau << "    Tr=" << Tr << "    DenG=" << DenG << "    DenL=" << DenL << endl;
         cout << "Radius=" << Radius 
