@@ -18,6 +18,9 @@
 #include <iomanip>
 #include <iostream> 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
+
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <stdlib.h>
@@ -72,13 +75,14 @@ __constant__ int _HotLiquidBottom, _HotLiquidTop, _ColdLiquidBottom, _ColdLiquid
 __constant__ double _Thot, _Tcold;
 
 //蒸发率计算相关
-double ER,ER_LMH;	
+double ER,ER_LMH,ER_inst;	
 double DimEvaporation;   
 int startStep, NowStep;
-int startUpperMass = 0, NowUpperMass;
+int startUpperMass = 0, NowUpperMass, preStepUpperMass = 0;
 //******************************************MembraneDataStructure*******************************************
 double *Te, *Tx, *Ty, *Tz;
 double *DVx, *DVy, *DVz;
+
 //*************************************************************************************************
 
 cudaError_t  err;
@@ -112,6 +116,7 @@ void SaveTask();
 
 int  GetMyTickCount();
 int  TimeInterval();
+void printTimeStamp();
 void DeviceQuery();
 void CudaInitialize();
 void CudaFree();
@@ -1381,6 +1386,10 @@ int main(int argc, char *argv[])
 			MembraneERCalc();
 			ShowData();
 
+			//输出时间戳
+			printTimeStamp();
+
+			//演化开始
 			for (NowStep = 1; NowStep <= AllStep; ++NowStep)
 			{
 				//dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
@@ -1970,22 +1979,22 @@ void MembraneParaShow()
 
 		cout << "NowStep" 
 			<< "    Mass" 
-			<< "    Den(DX/2 , DY/2, 0)" 
-			<< "    Den(DX/2, DY/2, DZ/2)" 
 			<< "    MaxSpeed"
+			<< "	NowUpperMass"
 			<< "	ER"
 			<< " 	ER_LMH"
+			<< " 	ER_inst"
 			<< "    StepTime"
 			<< endl;
 	}
 
 	cout << setw(9) << NowStep 
 		<< "    " << setiosflags(ios::fixed) << setprecision(12) << Mass
-		<< "    " << setprecision(6) << Grid[DX / 2][DY / 2][0].Den
-		<< "    " << Grid[DX / 2][DY / 2][DZ / 2].Den
 		<< "    " << MaxSpeed
+		<< "	" << NowUpperMass
 		<< "	" << ER
 		<< " 	" << ER_LMH
+		<< " 	" << ER_inst
 		<< "    " << StepTime
 		<< endl;
 }
@@ -2068,15 +2077,16 @@ void MembraneERCalc()
 	{
 		if(k > PoreTop) NowUpperMass += Dens[I(i, j, k)];	
 	}
+	if(NowStep == 0) 
+	{
+		preStepUpperMass = NowUpperMass;
+	}
 	if(NowStep == startStep) startUpperMass = NowUpperMass;
 
 	ER = (NowUpperMass - startUpperMass) / (NowStep - startStep) / (DX - 1)/(DY - 1) ;
 	ER_LMH = ER * DimMass * DimEvaporation;
+	ER_inst = (NowUpperMass - preStepUpperMass) / (ShowStep) / (DX - 1)/(DY - 1) * DimMass * DimEvaporation;
 
-	//记录每一步的质量变化
-	{
-
-	}
 	//if( NowStep == startStep) startUpperMass = NowUpperMass;
 }
 
@@ -2109,3 +2119,8 @@ __global__ void Temperature(int *d_Type, double *d_Den, double *d_Vx, double *d_
     }
 }
 
+void printTimeStamp()
+{
+	auto now = chrono::system_clock::to_time_t(chrono::system_clock::now());
+	cout << "Time: " << put_time(localtime(&now), "%Y-%m-%d %X") << endl;
+}
