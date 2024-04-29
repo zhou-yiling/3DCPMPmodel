@@ -1940,7 +1940,7 @@ void MembraneParaInit()
 	HotLiquidBottom = HotLiquidTop - HotLiquidThickness;
 	ColdLiquidTop = DZ - 3;
 	ColdLiquidBottom = DZ - 3 - ColdLiquidThickness;
-	HydroPhobicPt = 0.04;
+	HydroPhobicPt = 0.07;
 	PtRadius = PoreRadius + 5 ;
 	
 	Porosity = Sq(PoreRadius) / ((DX - 1) * (DY - 1)) * 100 ;
