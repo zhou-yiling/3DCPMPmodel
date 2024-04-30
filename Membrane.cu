@@ -59,7 +59,7 @@ struct DVector
 
 
 short(*Mxyz)[DXYZ] = NULL;
-double *HostMelo = NULL, *HostDens = NULL;
+double *HostMelo = NULL, *HostDens = NULL, *HostPote = NULL; 
 double Ts[DQ], Mass, ReTau, Tau, Viscosity, Radius, MaxSpeed, Width;
 double Diameter, Gravity;
 double DimLen, DimTime, DimMass, DimF, DimT, DimV, DimA, DimW, DimB;
@@ -74,7 +74,7 @@ int	   SpreadTime=0;
 int PoreBottom, PoreTop, PoreCenterX, PoreCenterY, PoreRadius, FilmThickness;
 int HotLiquidBottom, HotLiquidTop, ColdLiquidBottom, ColdLiquidTop, HotLiquidThickness, ColdLiquidThickness;
 int PtRadius;
-int HydroPhobicPt;
+double HydroPhobicPt;
 double Tcold, Thot;
 __constant__ int _PoreBottom, _PoreTop, _PoreCenterX, _PoreCenterY, _PoreRadius, _PtRadius;
 __constant__ int _HotLiquidBottom, _HotLiquidTop, _ColdLiquidBottom, _ColdLiquidTop;
@@ -154,7 +154,7 @@ void Initialize()
 	MModel = MP_CPPRW;
 	Tau = 0.7; //Tau = 0.575;
 	Tr = 0.7;
-	K = 0.2;	//K = 0.1;	//计算三维液滴时取0.2;
+	K = 0.2;	//K = 0.1;	//计算三维液滴时取0.2;1
 	Ka = 0.001;
 	K1 = 0; 
 	K2 = -K1;
@@ -474,7 +474,6 @@ __global__ void ChemBoundaryComplex(char * Type, double * Dens, char CalcTargetL
         }
         Dens[I] = avg_den / w;
     }
-
 }
 
 __global__ void ChemBoundaryTag(char *Type , char originalPointType, char nextPointType)
@@ -500,11 +499,15 @@ __global__ void SetPorePote(char *Type, double *Pote)
 {
 	GridIndex;  LineIndex; 
 	if(I >= DXYZ) return;
-	if(Type[I] != LEVEL1 && Type[I] != LEVEL2 && Type[I] == LEVEL3) return;
+	if(Type[I] == FLUID) return;
+
 	//孔道内部 以及 孔口半径R内的区域 的化学势
 	if(Sq(D(i) - DX / 2) + Sq(D(j) - DY / 2) < Sq(_PtRadius))
 	{
-		Pote[I] =  _HydroPhobicPt;
+		if(k >= _PoreBottom && k <= _PoreTop)
+		{
+			Pote[I] =  _HydroPhobicPt;
+		}
 	}
 }
 
@@ -553,6 +556,7 @@ __global__ void CompressField(double * Dens, double * Temp)
 	const int II = (i*DY*DZ + j*DZ + k) * DR;
 	Temp[I] = Dens[II];
 }
+
 
 
 /**
@@ -1012,7 +1016,12 @@ void SaveTask()
 	dim3  Block(LX, LY, 1), Thread(LZ, 1, 1);
 	CompressField << < Block, Thread >> > (Dens, Temp);
 	cudaMemcpy(HostDens, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+
+	CompressField << < Block, Thread >> > (Pote, Temp);
+	cudaMemcpy(HostPote, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+
 	//cudaMemcpy(HostDens, Dens, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
+	//cudaMemcpy(HostPote, Pote, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 
 	char FileName[256];
 	sprintf(FileName, "data/FlowField_%d", NowStep);
@@ -1024,6 +1033,7 @@ void SaveTask()
 	tec_file.Variables.push_back("j");
 	tec_file.Variables.push_back("k");
 	tec_file.Variables.push_back("Density");
+	tec_file.Variables.push_back("Pote");
 	tec_file.Zones.push_back(TEC_ZONE(FileName));
 	tec_file.Zones[0].Max[0] = LZ;//保存所有DZ    压缩保存为LZ
 	tec_file.Zones[0].Max[1] = LY;//保存所有DY    压缩保存为LY
@@ -1032,6 +1042,7 @@ void SaveTask()
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[1]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[2]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(HostDens));
+	tec_file.Zones[0].Data.push_back(TEC_DATA(HostPote));
 	tec_file.write_plt(1);
 }
 
@@ -1370,10 +1381,10 @@ int main(int argc, char *argv[])
 		setPara(FilmThickness, 50);
 		setPara(HotLiquidThickness, 50);
 		setPara(ColdLiquidThickness, 50);
-		setPara(Thot, 0.7); setPara(Tr, 0.7);
+		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.6);
-		setPara(ShowStep, 100);
-		setPara(AllStep, 3000);
+		setPara(ShowStep, 1000);
+		setPara(AllStep, 100000);
 		setPara(BasePt,0.0);
 
 		SetMultiphase();
@@ -1395,8 +1406,6 @@ int main(int argc, char *argv[])
 
 		{
 
-			//输出时间戳
-			printTimeStamp();
 
 			//保存场的初始化图像
 			SaveTask();
@@ -1409,11 +1418,11 @@ int main(int argc, char *argv[])
 			{
 				//dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
 				{
-					Temperature<<<DimBlock, DimThread>>>(Type,  Dens,  Te,  MVx,  MVy,  MVz , Tx ,  Ty ,  Tz ,  DVx,  DVy,  DVz ) ;
+					//Temperature<<<DimBlock, DimThread>>>(Type,  Dens,  Te,  MVx,  MVy,  MVz , Tx ,  Ty ,  Tz ,  DVx,  DVy,  DVz ) ;
 					//计算化学势边界
 					ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL1, FLUID);
 					ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL2, LEVEL1);
-					ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL3, LEVEL2);
+					//ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL3, LEVEL2);		//五点则只需算两层
 				
 					ChemPotential << <DimBlock, DimThread >> > (Type, Dens, Pote, Te);
 				}
@@ -1572,11 +1581,13 @@ void CudaInitialize()
 	cudaMemcpyToSymbol(_NowStep, &NowStep, sizeof(double));
 	cudaMemcpyToSymbol(_DropStep, &DropStep, sizeof(double));
 	cudaMemcpyToSymbol(_Gravity, &Gravity, sizeof(double));
+	cudaMemcpyToSymbol(_Tc, &Tc, sizeof(double));
 	if ((err = cudaGetLastError()) != cudaSuccess)   cout << "CudaSymbol : " << (int)err << "   " << cudaGetErrorString(err) << endl;
 
 	Mxyz = new short[3][DXYZ];
 	HostDens = new double[DXYZ];
 	HostMelo = new double[DXYZ];
+	HostPote = new double[DXYZ];
 
 
 	//压缩时写法
@@ -1603,6 +1614,7 @@ void CudaFree()
 	delete[] Mxyz;
 	delete[] HostDens;
 	delete[] HostMelo;
+	delete[] HostPote;
 
 	cudaFree(Type);
 	cudaFree(Dist);
@@ -1769,6 +1781,8 @@ void CalcMacroCPU()
     FOR_iDX_jDY_kDZ_Fluid 
     {
 		double Den = Dens[I(i, j, k)];
+		Mass += Den; //求总质量
+
 		if( Den!=Den || Den<0 ) 
 		{
 			err_den = true;
@@ -1776,12 +1790,31 @@ void CalcMacroCPU()
 			errorfile << "Density: "<< NowStep << " " << i << " " << j << " " << k << " Den = " << Den << endl;
 			errorfile.close();
 		}
-		Mass += Den; //求总质量
+
+		for(int f = 0; f < DQ; ++f) 
+		{
+			if(Type[I(i,j,k)] != FLUID) break;
+
+			double t = Dist[f*DXYZ + I(i, j, k)];
+            if(t <=0 || t >= 5)
+			{
+				err_distribution = true;
+				ofstream errorfile("data/error_distribution.txt", ios::app);
+				errorfile << "Dist: "<< NowStep << " " << i << " " << j << " " << k << " " << f << " Dist = " << t << endl;
+				errorfile.close();
+			}
+		}
+
 	}
 
 	if(err_den) 
 	{
 		cout << " Error Density! " << endl;
+		NowStep = AllStep;
+	}
+	if(err_distribution) 
+	{
+		cout << " Error Distribution! " << endl;
 		NowStep = AllStep;
 	}
 
@@ -1829,6 +1862,10 @@ void ShowData()
 #else
 			cout << "Error:  Please define the Pote calculation method!" << endl;
 #endif
+
+		//输出时间戳
+		printTimeStamp();
+
 	}	//end of if(NowStep == 0)
 
 
@@ -1839,6 +1876,8 @@ void ShowData()
 #ifdef CONTACTANGLE	
 		ContactAngleShow();
 #endif
+
+	if(NowStep == AllStep) printTimeStamp();		//结束时间戳
 }
 
 
@@ -1940,7 +1979,7 @@ void MembraneParaInit()
 	HotLiquidBottom = HotLiquidTop - HotLiquidThickness;
 	ColdLiquidTop = DZ - 3;
 	ColdLiquidBottom = DZ - 3 - ColdLiquidThickness;
-	HydroPhobicPt = 0.07;
+	HydroPhobicPt = 0.04;
 	PtRadius = PoreRadius + 5 ;
 	
 	Porosity = Sq(PoreRadius) / ((DX - 1) * (DY - 1)) * 100 ;
@@ -1969,8 +2008,6 @@ void MembraneParaInit()
 	cudaMemcpyToSymbol(_PtRadius, &PtRadius, sizeof(int));
 	cudaMemcpyToSymbol(_Thot, &Tr, sizeof(double));
 	cudaMemcpyToSymbol(_Tcold, &Tcold, sizeof(double));
-	cudaMemcpyToSymbol(_Tc, &Tc, sizeof(double));
-
 }
 void MembraneParaFree()
 {
@@ -2138,11 +2175,25 @@ void MembraneERCalc()
 	{
 
 		deltaMass = NowUpperMass - preStepUpperMass;
-		ER_inst = deltaMass /D(ShowStep) / D((DX - 1)/(DY - 1)) * DimEvaporation;
+		ER_inst = deltaMass /D(ShowStep) / D((DX - 1) * (DY - 1)) * DimEvaporation;
 		// cout << "ER_inst " << ER_inst << endl;
 		// cout << "instDeltaMass : " << NowUpperMass - preStepUpperMass << endl;
 	}
 	preStepUpperMass = NowUpperMass;
+
+	ofstream File("data/ER.txt", ios::app);
+	if(!File.good())
+	{
+		cout << "File ER.txt open fail!" << endl;
+		return;
+	}
+	if(NowStep == 0)
+	{
+		File << "NowStep" << "    ER" << "    ER_LMH" << "    ER_inst" << endl;
+	}
+
+	File << NowStep << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
+	File.close();
 }
 
 
