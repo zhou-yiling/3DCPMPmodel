@@ -1302,9 +1302,9 @@ int main(int argc, char *argv[])
 				{
 					//ChemBoundary<< <Block, Thread >> > (Type, Dens, Pote);
 
-					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL1, FLUID);
-					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL2, LEVEL1);
-					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL3, LEVEL2);
+					ChemBoundaryComplex<< <DimBlock, DimThread >> > (Type, Dens, LEVEL1, FLUID);
+					ChemBoundaryComplex<< <DimBlock, DimThread >> > (Type, Dens, LEVEL2, LEVEL1);
+					ChemBoundaryComplex<< <DimBlock, DimThread >> > (Type, Dens, LEVEL3, LEVEL2);
 				
 					ChemPotential << <DimBlock, DimThread >> > (Type, Dens, Pote);
 				}
