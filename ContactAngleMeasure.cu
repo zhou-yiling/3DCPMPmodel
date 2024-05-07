@@ -419,30 +419,28 @@ __global__ void ChemBoundaryTag(char *Type , char originalPointType, char nextPo
     }
 }
 
-__global__ void ChemBoundaryComplex(char * Type, double * Dens, char CalcTargetLayerTag , char SourceDataLayerTag) 
+__global__ void ChemBoundaryComplex(char * Type, double * Dens, const char solid, const char fluid) 
 {
-    const int i = blockIdx.x;
-    const int j = blockIdx.y;
-    const int k = threadIdx.x;
-    const int p = i * DY * DZ + j * DZ + k;
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
 
-    if(Type[p] == CalcTargetLayerTag)
+    if(Type[I] == solid)
     {
         double avg_den = 0;
         double w = 0;
 
         for (int f = 1; f < DQ; ++f) 
         {
-            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
-            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+            const int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp = I(xoffset, yoffset, zoffset);
 
-            if(Type [pp] == SourceDataLayerTag)
+            if(Type [pp] == fluid)
             {
                avg_den += Alpha[f] * Dens[pp];
                w += Alpha[f];
             }
         }
-        Dens[p] = avg_den / w;
+        if(w) Dens[I] = avg_den / w;
+		Pote[I] = _BasePt;
     }
 
 }
