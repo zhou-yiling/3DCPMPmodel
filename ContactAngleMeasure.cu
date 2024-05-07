@@ -119,8 +119,8 @@ dim3  DimBlock((DX*DY*DZ + 64 - 1) / 64); dim3 DimThread(64);
 void Initialize()
 {
 	MModel = MP_CPPRW;
-	Tau = 0.8; //Tau = 0.575;
-	Tr = 0.7;
+	Tau = 0.7; //Tau = 0.575;
+	Tr = 0.68;
 	K = 0.2;	//K = 0.1;	//计算三维液滴时取0.2;
 	Ka = 0.001;
 	K1 = 0; 
@@ -144,7 +144,7 @@ void Initialize()
 	TasKNum = 1;
 	ShowStep = 10000;
 	SaveStep = 10000;
-	AllStep = 100 * 10000;
+	AllStep = 80 * 10000;
 	NowStep = StepTime = 0;
 	DropStep = 500;//7000
 	BeginTime = LastTime = GetMyTickCount();
@@ -400,33 +400,52 @@ __global__ void ChemBoundary(char * Type, double * Dens, double * Pote)
 #endif
 }
 
-// __global__ void ChemBoundaryComplex(char * Type, double * Dens, char CalcTargetLayerTag , char SourceDataLayerTag) 
-// {
-//     const int i = blockIdx.x;
-//     const int j = blockIdx.y;
-//     const int k = threadIdx.x;
-//     const int p = i * DY * DZ + j * DZ + k;
+__global__ void ChemBoundaryTag(char *Type , char originalPointType, char nextPointType)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+    if (Type[I] == SOLID)
+    {
+        for (int f = 1; f < DQ; ++f)
+        {
+            if(i + Ex[f] >= DX || i + Ex[f] < 0 || j + Ey[f] >= DY || j + Ey[f] < 0 || k + Ez[f] >= DZ || k + Ez[f] < 0)  continue;
 
-//     if(Type[p] == CalcTargetLayerTag)
-//     {
-//         double avg_den = 0;
-//         double w = 0;
+			int II = I(i + Ex[f], j + Ey[f], k + Ez[f]);
+            if (Type[II] == nextPointType)
+            {
+					Type[I] = originalPointType;
+					break;
+            }
+        }
+    }
+}
 
-//         for (int f = 1; f < DQ; ++f) 
-//         {
-//             int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
-//             const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+__global__ void ChemBoundaryComplex(char * Type, double * Dens, char CalcTargetLayerTag , char SourceDataLayerTag) 
+{
+    const int i = blockIdx.x;
+    const int j = blockIdx.y;
+    const int k = threadIdx.x;
+    const int p = i * DY * DZ + j * DZ + k;
 
-//             if(Type [pp] == SourceDataLayerTag)
-//             {
-//                avg_den += Alpha[f] * Dens[pp];
-//                w += Alpha[f];
-//             }
-//         }
-//         Dens[p] = avg_den / w;
-//     }
+    if(Type[p] == CalcTargetLayerTag)
+    {
+        double avg_den = 0;
+        double w = 0;
 
-// }
+        for (int f = 1; f < DQ; ++f) 
+        {
+            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+
+            if(Type [pp] == SourceDataLayerTag)
+            {
+               avg_den += Alpha[f] * Dens[pp];
+               w += Alpha[f];
+            }
+        }
+        Dens[p] = avg_den / w;
+    }
+
+}
 
 __global__ void NonidealForce(char* Type, double* Dens, double* Pote, double* Fx, double* Fy, double* Fz)
 {
@@ -1261,7 +1280,12 @@ int main(int argc, char *argv[])
 		CudaInitialize();
 		SetFlowField << <DimBlock, DimThread >> > (Type, Dens, Pote, Dist, Temp);
 
-		for( BasePt = -0.08 ;BasePt <=-0.015 ; BasePt += 0.005, No++)
+		//标记化学势边界点
+		ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL1, FLUID); // (type, originPointType, nextPointType)
+		ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL2, LEVEL1);
+		ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL3, LEVEL2);
+
+		for( BasePt = -0.08 ;BasePt <=-0.14; BasePt += 0.005, No++)
 		{
 			cout << "Now the BasePt = " << BasePt << endl;
 
@@ -1276,11 +1300,11 @@ int main(int argc, char *argv[])
 			{
 				dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
 				{
-					ChemBoundary<< <Block, Thread >> > (Type, Dens, Pote);
+					//ChemBoundary<< <Block, Thread >> > (Type, Dens, Pote);
 
-					// ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL1, FLUID);
-					// ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL2, LEVEL1);
-					// ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL3, LEVEL2);
+					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL1, FLUID);
+					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL2, LEVEL1);
+					ChemBoundaryComplex<< <Block, Thread >> > (Type, Dens, LEVEL3, LEVEL2);
 				
 					ChemPotential << <DimBlock, DimThread >> > (Type, Dens, Pote);
 				}
