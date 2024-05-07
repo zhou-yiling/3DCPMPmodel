@@ -144,7 +144,7 @@ void Initialize()
 	TasKNum = 1;
 	ShowStep = 10000;
 	SaveStep = 10000;
-	AllStep = 80 * 10000;
+	AllStep = 30 * 10000;
 	NowStep = StepTime = 0;
 	DropStep = 500;//7000
 	BeginTime = LastTime = GetMyTickCount();
@@ -1285,7 +1285,7 @@ int main(int argc, char *argv[])
 		ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL2, LEVEL1);
 		ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL3, LEVEL2);
 
-		for( BasePt = -0.08 ;BasePt <=-0.14; BasePt += 0.005, No++)
+		for( BasePt = -0.08 ;BasePt <=0.14; BasePt += 0.005, No++)
 		{
 			cout << "Now the BasePt = " << BasePt << endl;
 
