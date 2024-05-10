@@ -50,6 +50,13 @@ void MembraneParaShow();
 void ContactAngleShow();
 void MembraneParaFree();
 void MembraneERCalc();
+void AddFilm();
+__global__ void SetFilm(char * Type, double * Dens, double * Pote);  
+__global__ void SetPlate(char * Type, double * Dens, double * Pote); //更改底板润湿性
+__global__ void SetPorePote(char *Type, double *Pote);
+
+void plotInitField_origin();
+void curveER_Time();
 
 
 __global__ void Temperature(char *Type, double *Dens, double *Te, double *MVx, double *MVy, double *MVz ,double *Tx , double *Ty , double *Tz , double *DVx, double *DVy, double *DVz ) ;
@@ -144,7 +151,7 @@ void DeviceQuery();
 void CudaInitialize();
 void CudaFree();
 
-err_type LoadCheckPoint();
+err_type LoadCheckPoint(char * FileName);
 err_type SaveCheckPoint();
 
 //*************************************************************************************************
@@ -170,7 +177,7 @@ void Initialize()
 {
 	MModel = MP_CPPRW;
 	Tau = 0.7; //Tau = 0.575;
-	Tr = 0.7;
+	Tr = 0.68;
 	K = 0.2;	//K = 0.1;	//计算三维液滴时取0.2;1
 	Ka = 0.001;
 	K1 = 0; 
@@ -187,7 +194,7 @@ void Initialize()
 
 	ReTau = double(1) / Tau;
 	Viscosity = (Tau * 2 - 1) / 6;
-	DimConversion(10 , Diameter, 1.0, 1.0, Viscosity, 0.01);
+	DimConversion(10 , Diameter, 1.0, 1.0, Viscosity, 0.01);  // 10latices : 1um (cm) // 1latices den : 1 g/cm^3 
 	Gravity = (Diameter == 0) ? 0 : -980 / DimA;
 	//量纲变换,求出重力加速度;
 	//cout << DimLen<<"	"<<DimTime <<"	"<< Gravity << endl;//Radius=30 Diameter=0.015 Tau=0.7 DimLen=0.00025 DimTime=4.16667e-7
@@ -417,7 +424,6 @@ __global__ void GlobalCollide(char* Type, double* Dens, double* Pote, double* Di
 			double Df = Dist[f*DXYZ + I] + Feq(f, Dens[I], EVx, EVy, EVz) - Feq(f, Dens[I], Vx[I], Vy[I], Vz[I]);  //精确差分力项;
 
 			(Type[I(ii, jj, kk)] == FLUID ? Temp[f*DXYZ + I(ii, jj, kk)] : Temp[Re[f] * DXYZ + I]) = Df;  //流动和半程反弹;	
-
 		}
 	}
 }
@@ -527,7 +533,8 @@ __global__ void SetPorePote(char *Type, double *Pote)
 	//孔道内部 以及 孔口半径R内的区域 的化学势
 	if(Sq(D(i) - DX / 2) + Sq(D(j) - DY / 2) < Sq(_PtRadius))
 	{
-		if(k >= _PoreBottom && k <= _PoreTop)
+		
+		if(k >= _PoreBottom && k <= _PoreTop - 2)
 		{
 			Pote[I] =  _HydroPhobicPt;
 		}
@@ -616,7 +623,7 @@ void DimConversion(double Length, double MacroLength, double Density, double Mac
 	DimW = 1.0 / DimTime;
 	DimB = 1.0 / Sq(DimTime);
 
-	DimEvaporation =  DimLen / DimTime * 36000 ;  // cm / s *36000 = l^2 /(m^2 * h)
+	DimEvaporation =  DimLen / DimTime * 36000 ;  // cm / s *36000 = l /(m^2 * h)
 }
 
 //*************************************************************************************************
@@ -1043,6 +1050,8 @@ void SaveTask()
 	CompressField << < Block, Thread >> > (Pote, Temp);
 	cudaMemcpy(HostPote, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
 
+	CompressField << < Block, Thread >> > (Te, Temp);
+	cudaMemcpy(HostTe, Temp, sizeof)
 	//cudaMemcpy(HostDens, Dens, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 	//cudaMemcpy(HostPote, Pote, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 
@@ -1057,6 +1066,7 @@ void SaveTask()
 	tec_file.Variables.push_back("k");
 	tec_file.Variables.push_back("Density");
 	tec_file.Variables.push_back("Pote");
+	tec_file.Variables.push_back("Te");
 	tec_file.Zones.push_back(TEC_ZONE(FileName));
 	tec_file.Zones[0].Max[0] = LZ;//保存所有DZ    压缩保存为LZ
 	tec_file.Zones[0].Max[1] = LY;//保存所有DY    压缩保存为LY
@@ -1065,6 +1075,7 @@ void SaveTask()
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[1]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[2]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(HostDens));
+	tec_file.Zones[0].Data.push_back(TEC_DATA(HostPote));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(HostPote));
 	tec_file.write_plt(1);
 }
@@ -1398,7 +1409,9 @@ int main(int argc, char *argv[])
 	//for( BasePt = 0.01 ;BasePt >= -0.06; BasePt -= 0.005)
 	//for (; No < TasKNum; ++No)
 	{
-		setPara(LoadInitFlag, false);	//是否通过加载的方式对流场进行初始化
+		setPara(LoadInitFlag, true);	//是否通过加载的方式对流场进行初始化
+		//char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
+		char LoadFileName[] = "checkpoint/CheckPoint_WithFilm_50000Step.txt";	//加载的文件名
 		setPara(SaveCheckPointFlag, true);	//保存CheckPoint
 
 		Initialize();
@@ -1406,19 +1419,21 @@ int main(int argc, char *argv[])
 		setPara(FilmThickness, 50);   //最好设置为偶数
 		setPara(HotLiquidThickness, 50);
 		setPara(ColdLiquidThickness, 50);
-		setPara(Thot, 0.68); setPara(Tr, 0.68);
+		setPara(Thot, 0.61); setPara(Tr, 0.61);
 		setPara(Tcold, 0.6);
 		setPara(ShowStep, 1000);
-		setPara(AllStep, 15 * 10000);
-		setPara(BasePt,0.0);
+		setPara(AllStep, 10 * 10000);
+		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
-		setPara(HydroPhobicPt, 0.07);	//疏水 150degree
+		//setPara(HydroPhobicPt, 0.07);	//疏水 140degree
+		//setPara(HydroPhobicPt, 0.05);	//疏水 120degree
+		setPara(HydroPhobicPt, 0.035);	//疏水 110degree
 
 		SetMultiphase();
 		MembraneParaInit();
 		CudaInitialize();
 		
-		if(0 == LoadInitFlag)//对流场进行初始化
+		if(0 == LoadInitFlag)//以非加载形式对流场进行初始化
 		{
 			//设置流场，基础的化学势
 			SetFlowField << <DimBlock, DimThread >> > (Type, Dens, Pote, Dist, Temp, Te);
@@ -1433,7 +1448,11 @@ int main(int argc, char *argv[])
 		}
 		else //通过加载的方式进行初始化
 		{
-			int err_load = LoadCheckPoint();	
+			int err_load = LoadCheckPoint(LoadFileName);
+
+			AddFilm();
+			SetPlate<<<DimBlock, DimThread>>>(Type, Dens, Pote);
+
 			if(err_load == 0)
 			{
 				cout << "Load CheckPoint Fail!" << endl;
@@ -1449,16 +1468,16 @@ int main(int argc, char *argv[])
 		printcudaMemoryInfo();
 
 		{
-
-
 			//保存场的初始化图像
 			SaveTask();
 			CalcMacroCPU();
 			MembraneERCalc();
+			plotInitField_origin();		//origin画初始场
 			ShowData();
 
+			if(LoadInitFlag) setPara(NowStep,50000);
 			//演化开始
-			for (NowStep = 1; NowStep <= AllStep; ++NowStep)
+			for (; NowStep <= AllStep; ++NowStep)
 			{
 				//dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
 				{
@@ -1496,6 +1515,7 @@ int main(int argc, char *argv[])
 		}
 		CudaFree();
 	}
+
 	cout << endl << " Press Enter key to quit ...... ";   cin.get();
 	delete[] TDen;
 	return 0;
@@ -2019,7 +2039,7 @@ void MembraneParaInit()
 	PoreBottom = centerZ - FilmThickness/2;								
 	PoreCenterX = DX / 2;
 	PoreCenterY = DY / 2;
-	PoreRadius = 30;
+	PoreRadius = 20;
 	HotLiquidTop = PoreBottom;
 	HotLiquidBottom = HotLiquidTop - HotLiquidThickness;
 	ColdLiquidTop = DZ - 3;
@@ -2052,7 +2072,7 @@ void MembraneParaInit()
 	cudaMemcpyToSymbol(_HydroPhobicPt, &HydroPhobicPt, sizeof(double));
 	cudaMemcpyToSymbol(_HydroPhilicPt, &HydroPhilicPt, sizeof(double));
 	cudaMemcpyToSymbol(_PtRadius, &PtRadius, sizeof(int));
-	cudaMemcpyToSymbol(_Thot, &Tr, sizeof(double));
+	cudaMemcpyToSymbol(_Thot, &Thot, sizeof(double));
 	cudaMemcpyToSymbol(_Tcold, &Tcold, sizeof(double));
 }
 void MembraneParaFree()
@@ -2209,15 +2229,9 @@ void MembraneERCalc()
 	if(NowStep > startStep) 
 	{
 		TotaldeltaMass = NowUpperMass - startUpperMass;
-		//ER =((NowUpperMass - startUpperMass)) / D(NowStep - startStep) / D((DX - 1)*(DY - 1)) ;
 		ER = TotaldeltaMass / D(NowStep - startStep) / D((DX - 1)*(DY - 1)) ;
-		// cout << "DeltaMass: " << deltaMass << endl;
 	}
 
-	// cout << "ER " << ER << endl;
-	// cout << "ER_LMH " << ER * DimMass / DimTime / DimLen / DimLen * 36000 << endl;
-	// cout << "ER_LMH " << ER * DimEvaporation << endl;
-	// cout << "DimEvaporation " << DimEvaporation << endl;
 	ER_LMH = ER  * DimEvaporation;
 	
 
@@ -2226,24 +2240,10 @@ void MembraneERCalc()
 
 		deltaMass = NowUpperMass - preStepUpperMass;
 		ER_inst = deltaMass /D(ShowStep) / D((DX - 1) * (DY - 1)) * DimEvaporation;
-		// cout << "ER_inst " << ER_inst << endl;
-		// cout << "instDeltaMass : " << NowUpperMass - preStepUpperMass << endl;
 	}
 	preStepUpperMass = NowUpperMass;
 
-	ofstream File("data/ER.txt", ios::app);
-	if(!File.good())
-	{
-		cout << "File ER.txt open fail!" << endl;
-		return;
-	}
-	if(NowStep == 0)
-	{
-		File << "NowStep" << "    ER" << "    ER_LMH" << "    ER_inst" << endl;
-	}
-
-	File << NowStep << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
-	File.close();
+	curveER_Time();
 }
 
 
@@ -2287,14 +2287,9 @@ err_type SaveCheckPoint()
 			mkdir(prefix, 0777);				//则创建
 	#endif
 
-	// ofstream File("checkpoint/CheckPoint.txt", ios::app);
-	// if(!File.good())
-	// {
-	// 	cout << "CheckPoint.txt open fail!" << endl;
-	// 	return 0;
-	// }
-
-	FILE *File = fopen("checkpoint/CheckPoint.txt", "a+");
+	char FileName[256];
+	sprintf(FileName, "%s/CheckPoint_WithFilm_%dStep.txt", prefix, NowStep - 1);
+	FILE *File = fopen(FileName, "w"); // FILE *File = fopen("checkpoint/CheckPoint.txt", "w"); //重新写入
 	if(File == NULL)
 	{
 		cout << "CheckPoint.txt open fail!" << endl;
@@ -2303,37 +2298,47 @@ err_type SaveCheckPoint()
 
 	cudaDeviceSynchronize();
 
-	//Type , Dens , Pote, Dist, Temp, Te
+	//Type , Dens , Pote, Dist, Temp, Te, V
 	fwrite(Type, sizeof(char), DX * DY * DZ, File);
 	fwrite(Dens, sizeof(double), DX * DY * DZ, File);
 	fwrite(Pote, sizeof(double), DX * DY * DZ, File);
 	fwrite(Dist, sizeof(double), DX * DY * DZ * DQ, File);
-	fwrite(Temp, sizeof(double), DX * DY * DZ * DQ, File);
 	fwrite(Te, sizeof(double), DX * DY * DZ, File);
+	fwrite(Vx, sizeof(double), DX * DY * DZ, File);
+	fwrite(Vy, sizeof(double), DX * DY * DZ, File);
+	fwrite(Vz, sizeof(double), DX * DY * DZ, File);
 
 	fclose(File);
+
+	FILE *File2 = fopen("checkpoint/parameters.txt", "w"); 
+	if(File2 == NULL)
+	{
+		cout << "parameters.txt open fail!" << endl;
+		return 0;
+	}
 
 	return 1;
 }
 
-err_type LoadCheckPoint()
+err_type LoadCheckPoint(char * FileName)
 {
 
-	FILE *File = fopen("checkpoint/CheckPoint.txt", "r");
+	FILE *File = fopen(FileName, "r");
 	if(File == NULL)
 	{
 		cout << "CheckPoint.txt open fail!" << endl;
 		return 0;
 	}
 
-
-	//Type , Dens , Pote, Dist, Temp, Te
+	//Type , Dens , Pote, Dist, Temp, Te, V
 	fread(Type, sizeof(char), DX * DY * DZ, File);
 	fread(Dens, sizeof(double), DX * DY * DZ, File);
 	fread(Pote, sizeof(double), DX * DY * DZ, File);
 	fread(Dist, sizeof(double), DX * DY * DZ * DQ, File);
-	fread(Temp, sizeof(double), DX * DY * DZ * DQ, File);
 	fread(Te, sizeof(double), DX * DY * DZ, File);
+	fread(Vx, sizeof(double), DX * DY * DZ, File);
+	fread(Vy, sizeof(double), DX * DY * DZ, File);
+	fread(Vz, sizeof(double), DX * DY * DZ, File);
 
 	cudaDeviceSynchronize();
 
@@ -2341,3 +2346,118 @@ err_type LoadCheckPoint()
 
 	return 1;
 }
+
+//-------------------------------------临时函数----------------------------------------------------------
+//当场完全平衡后加入膜的设置
+void AddFilm()
+{
+	SetFilm<<< DimBlock, DimThread>>>(Type, Dens, Pote);
+
+	ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL1, FLUID); // (type, originPointType, nextPointType)
+	ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL2, LEVEL1);
+	ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL3, LEVEL2);
+
+	SetPorePote<<< DimBlock, DimThread>>>(Type, Pote);
+}
+
+__global__ void SetFilm(char * Type, double * Dens, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if ( k >= _PoreBottom && k <= _PoreTop)		//设置膜和孔
+	{
+		if(Sq(D(i) - _PoreCenterX) + Sq(D(j) - _PoreCenterY) >= Sq(_PoreRadius) ) 
+		{
+			Type[I] = SOLID;
+			Dens[I] = 0;
+			Pote[I] = _BasePt;
+		}
+	}
+}
+
+//修改上下底板的润湿性
+__global__ void SetPlate(char * Type, double * Dens, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if(k >= DZ - 3)		Pote[I] = _BasePt;
+	if(k <= 2) Pote[I] = _BasePt;
+}
+
+//-------------------------------需要绘制的曲线图-----------------------------------------------
+void curveER_Time()
+{
+	ofstream File("data/ER_time.txt", ios::app);
+	if(!File.good())
+	{
+		cout << "File ER.txt open fail!" << endl;
+		return;
+	}
+	if(NowStep == 0)
+	{
+		File << "NowStep" << "    ER" << "    ER_LMH" << "    ER_inst" << endl;
+	}
+
+	File << NowStep << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
+	File.close();
+}
+
+void curveER_PoreR()
+{
+	if(NowStep != AllStep) return;
+
+	int headerflag = 0;
+	if(access("data/ER_PoreRadius.txt", 0) == 1)	//如果文件存在
+	{
+		headerflag = 1;
+	}
+
+	ofstream File("data/ER_PoreRadius.txt", ios::app);
+	if(!File.good())
+	{
+		cout << "File ER_PoreRadius.txt open fail!" << endl;
+		return;
+	}
+
+	if(!headerflag) File << "PoreRadius" << "	PoreRadius(um)" << "    ER" << "    ER_LMH(lm^-2h^-1)" << "    ER_inst(lm^-2h^-1)" << endl;
+	
+	File << PoreRadius << "	" << PoreRadius * DimLen * 10000 << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
+
+	File.close();
+}
+
+__global__ void setTemperature(double * Te)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+	if (k > _PoreTop)
+	{
+		Te[I] = _Tcold;
+	}
+}
+
+void plotInitField_origin()
+{
+	if(NowStep != 0) return;	
+
+	ofstream file("data/InitField_Origin.txt");
+	if(!file.good())
+	{
+		cout << "File InitField_Origin.txt open fail!" << endl;
+		return;
+	}
+
+	//Header
+	file << "i   j   k   Dens" << endl;
+
+	//Solid
+	FOR_iDX_jDY_kDZ
+	{
+		if(Type[I(i, j ,k)] != FLUID)
+			file << i << " " << j << " " << k << " " << Pote[I(i,j,k)] + 100 << endl;   
+		else //Fluid
+		{
+			file << i << " " << j << " " << k << " " << Dens[I(i,j ,k)] << endl;
+		}
+	}
+}
+
