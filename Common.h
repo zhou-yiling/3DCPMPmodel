@@ -22,8 +22,8 @@
 //const int DY = 501;
 //const int DZ = 151;
 
-const int DY = 301;
 const int DX = 301;
+const int DY = 1;
 const int DZ = 301;
 
 //const int DY = 201;
