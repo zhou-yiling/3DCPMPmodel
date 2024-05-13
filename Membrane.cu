@@ -282,20 +282,20 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			Dens[I] = 0;
 			Pote[I] = _HydroPhilicPt;  //亲水
 		}
-		// else if ( k >= _PoreBottom && k <= _PoreTop)		//设置膜和孔
-		// {
-		// 	if(Sq(D(i) - _PoreCenterX) + Sq(D(j) - _PoreCenterY) < Sq(_PoreRadius) ) 
-		// 	{
-		// 		Type[I] = FLUID;
-		// 		Pote[I] = 0;
-		// 	}
-		// 	else
-		// 	{
-		// 		Type[I] = SOLID;
-		// 		Dens[I] = 0;
-		// 		Pote[I] = _HydroPhilicPt;
-		// 	}
-		// }
+		else if ( k >= _PoreBottom && k <= _PoreTop)		//设置膜和孔
+		{
+			if(Sq(D(i) - _PoreCenterX) + Sq(D(j) - _PoreCenterY) < Sq(_PoreRadius) ) 
+			{
+				Type[I] = FLUID;
+				Pote[I] = 0;
+			}
+			else
+			{
+				Type[I] = SOLID;
+				Dens[I] = 0;
+				Pote[I] = _HydroPhilicPt;
+			}
+		}
 		else 						//设置液体
 		{
 			Type[I] = FLUID;
@@ -308,8 +308,7 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			double k1 = D(k) - _HotLiquidBottom, k2 = D(k) - _HotLiquidTop;
 			double k3 = D(k) - _ColdLiquidBottom, k4 = D(k) - _ColdLiquidTop;
 
-			// Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
-			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
 		}
 
 		Te[I] = _Thot;
@@ -627,7 +626,7 @@ void DimConversion(double Length, double MacroLength, double Density, double Mac
 	DimB = 1.0 / Sq(DimTime);
 
 	DimEvaporation =  DimLen / DimTime * 36000 ;  // cm / s *36000 = l /(m^2 * h)
-	DimEvaporation =  DimMass / (Sq(DimLen) * DimTime) * 36000 ;  // g / (cm^2 * s)  / (1.0 g/cm^3) = cm^3 / (cm^2 * s) =
+	//DimEvaporation =  DimMass / (Sq(DimLen) * DimTime) * 36000 ;  // g / (cm^2 * s)  / (1.0 g/cm^3) = cm^3 / (cm^2 * s) =
 }
 
 //*************************************************************************************************
@@ -1047,18 +1046,30 @@ void DataShowSave()
 
 void SaveTask()
 {
+
+	char prefix[] = "./data";
+	#ifdef WIN32
+		if (_access(prefix , 0) == -1)	//如果文件夹不存在
+			_mkdir(prefix);				//则创建
+	#else
+		if (access(prefix , 0) == -1)	//如果文件夹不存在
+			mkdir(prefix, 0777);				//则创建
+	#endif
+
 	dim3  Block(LX, LY, 1), Thread(LZ, 1, 1);
-	CompressField << < Block, Thread >> > (Dens, Temp);
-	cudaMemcpy(HostDens, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+	// CompressField << < Block, Thread >> > (Dens, Temp);
+	// cudaMemcpy(HostDens, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
 
-	CompressField << < Block, Thread >> > (Pote, Temp);
-	cudaMemcpy(HostPote, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+	// CompressField << < Block, Thread >> > (Pote, Temp);
+	// cudaMemcpy(HostPote, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
 
-	CompressField << < Block, Thread >> > (Te, Temp);
-	cudaMemcpy(HostTe, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+	// CompressField << < Block, Thread >> > (Te, Temp);
+	// cudaMemcpy(HostTe, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
 
-	//cudaMemcpy(HostDens, Dens, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
-	//cudaMemcpy(HostPote, Pote, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
+	cudaDeviceSynchronize();
+	cudaMemcpy(HostDens, Dens, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
+	cudaMemcpy(HostPote, Pote, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
+	cudaMemcpy(HostTe, Te, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 
 	char FileName[256];
 	sprintf(FileName, "data/FlowField_%d", NowStep);
@@ -1073,9 +1084,13 @@ void SaveTask()
 	tec_file.Variables.push_back("Pote");
 	tec_file.Variables.push_back("Te");
 	tec_file.Zones.push_back(TEC_ZONE(FileName));
-	tec_file.Zones[0].Max[0] = LZ;//保存所有DZ    压缩保存为LZ
-	tec_file.Zones[0].Max[1] = LY;//保存所有DY    压缩保存为LY
-	tec_file.Zones[0].Max[2] = LX;//保存所有DX    压缩保存为LX
+	// tec_file.Zones[0].Max[0] = LZ;//   压缩保存为LZ
+	// tec_file.Zones[0].Max[1] = LY;//   压缩保存为LY
+	// tec_file.Zones[0].Max[2] = LX;//   压缩保存为LX
+	tec_file.Zones[0].Max[0] = 301;//保存所有DZ  
+	tec_file.Zones[0].Max[1] = 1;//保存所有DY  
+	tec_file.Zones[0].Max[2] = 301;//保存所有DX  
+
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[0]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[1]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[2]));
@@ -1408,7 +1423,7 @@ int main(int argc, char *argv[])
 	cudaSetDevice(DeviceNo); //cudaSetDevice(1);
 	cout << "  Now is running on GPU device " << DeviceNo << endl;
 
-	char CodeTarget[] = "";
+	char TestName[] = "" ;	//3D/2D  
 	No = 0;
 	
 	//for( BasePt = 0.01 ;BasePt >= -0.06; BasePt -= 0.005)
@@ -1416,7 +1431,7 @@ int main(int argc, char *argv[])
 	{
 		Initialize();
 
-		setPara(LoadInitFlag, true);	//是否通过加载的方式对流场进行初始化
+		setPara(LoadInitFlag, false);	//是否通过加载的方式对流场进行初始化
 		// char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
 		char LoadFileName[] = "checkpoint/CheckPoint_WithFilm_50000Step.txt";	//加载的文件名
 		setPara(SaveCheckPointFlag, true);	//保存CheckPoint
@@ -1428,7 +1443,7 @@ int main(int argc, char *argv[])
 		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.6);
 		setPara(ShowStep, 1000);
-		setPara(AllStep, 18 * 10000);
+		setPara(AllStep, 20 * 10000);
 		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
 		//setPara(HydroPhobicPt, 0.07);	//疏水 140degree
@@ -1450,7 +1465,7 @@ int main(int argc, char *argv[])
 			ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL3, LEVEL2);
 
 			//设置膜孔的化学势
-			//SetPorePote << <DimBlock, DimThread >> > (Type, Pote);
+			SetPorePote << <DimBlock, DimThread >> > (Type, Pote);
 		}
 		else //通过加载的方式进行初始化			//对流场的设置进一步处理 
 		{
@@ -2061,7 +2076,7 @@ void MembraneParaInit()
 	//HydroPhobicPt = 0.08;
 	PtRadius = PoreRadius + 10 ;
 	
-	Porosity = Sq(PoreRadius) / ((DX - 1) * (DY - 1)) * 100 ;
+	//Porosity = Sq(PoreRadius) / ((DX - 1) * (DY - 1)) * 100 ;
 
 	cudaMallocManaged((void**)&DVx, sizeof(double) *DX*DY*DZ);
 	cudaMallocManaged((void**)&DVy, sizeof(double) *DX*DY*DZ);
@@ -2243,17 +2258,17 @@ void MembraneERCalc()
 	if(NowStep > startStep) 
 	{
 		TotaldeltaMass = NowUpperMass - startUpperMass;
-		ER = TotaldeltaMass / D(NowStep - startStep) / D((DX - 1)*(DY - 1)) ;
+		ER = TotaldeltaMass / D(NowStep - startStep) / D((DX - 1)) ;
 	}
 
-	ER_LMH = ER  * DimMass /(Sq(DimLen) * DimTime) * 36000;
+	ER_LMH = ER  * DimEvaporation;
 	
 
 	if(NowStep >= ShowStep) 
 	{
 
 		deltaMass = NowUpperMass - preStepUpperMass;
-		ER_inst = deltaMass /D(ShowStep) / D((DX - 1) * (DY - 1)) * DimEvaporation;
+		ER_inst = deltaMass /D(ShowStep) / D((DX - 1)) * DimEvaporation;
 	}
 	preStepUpperMass = NowUpperMass;
 
