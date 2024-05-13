@@ -309,7 +309,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			double k3 = D(k) - _ColdLiquidBottom, k4 = D(k) - _ColdLiquidTop;
 
 			// Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
-			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			//Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width));
 		}
 
 		Te[I] = _Thot;
@@ -1416,19 +1417,19 @@ int main(int argc, char *argv[])
 	{
 		Initialize();
 
-		setPara(LoadInitFlag, true);	//是否通过加载的方式对流场进行初始化
+		setPara(LoadInitFlag, false);	//是否通过加载的方式对流场进行初始化
 		// char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
 		char LoadFileName[] = "checkpoint/CheckPoint_WithFilm_50000Step.txt";	//加载的文件名
 		setPara(SaveCheckPointFlag, true);	//保存CheckPoint
 
 		//自定义setParameter
 		setPara(FilmThickness, 50);   //最好设置为偶数
-		setPara(HotLiquidThickness, 50);
+		setPara(HotLiquidThickness, 100);
 		setPara(ColdLiquidThickness, 50);
 		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.6);
 		setPara(ShowStep, 1000);
-		setPara(AllStep, 18 * 10000);
+		setPara(AllStep, 10 * 10000);
 		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
 		//setPara(HydroPhobicPt, 0.07);	//疏水 140degree
@@ -2292,7 +2293,7 @@ err_type SaveCheckPoint()
 {
 
 	char prefix[] = "./checkpoint";
-	char FieldName[] = "CheckPoint_WithFilm";
+	char FieldName[] = "CheckPoint_OnlyHotLiquid";
 
 	#ifdef WIN32
 		if (_access(prefix , 0) == -1)	//如果文件夹不存在
@@ -2440,7 +2441,7 @@ void curveER_Time()
 	}
 	if(NowStep == 0)
 	{
-		File << "NowStep" << "    ER" << "    ER_LMH" << "    ER_inst" << endl;
+		File << "TimeStep" << "    EvaporationRate(lattice)" << "    TotalEvaporationRate(Lm^-2h^-1)" << "    InstantEvaporationRate(Lm^-2h^-1)" << endl;
 	}
 
 	File << NowStep << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
@@ -2463,8 +2464,8 @@ void curveER_PoreR()
 		cout << "File ER_PoreRadius.txt open fail!" << endl;
 		return;
 	}
+	if(!headerflag) File << "PoreRadius" << "	PoreRadius(um)" <<"    EvaporationRate(lattice)" << "    TotalEvaporationRate(Lm^-2h^-1)" << "    InstantEvaporationRate(Lm^-2h^-1)" << endl;
 
-	if(!headerflag) File << "PoreRadius" << "	PoreRadius(um)" << "    ER" << "    ER_LMH(lm^-2h^-1)" << "    ER_inst(lm^-2h^-1)" << endl;
 	
 	File << PoreRadius << "	" << PoreRadius * DimLen * 10000 << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
 
@@ -2492,7 +2493,7 @@ void plotInitField_origin()
 	}
 
 	//Header
-	file << "i" << "    " << "j" << "    " << "Dens" << endl;
+	file << "X" << "    " << "Y" << "    " << "Density" << endl;
 
 	//Solid
 	for(int i = 0; i < DX; ++i)
