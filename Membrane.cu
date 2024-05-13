@@ -54,6 +54,7 @@ void AddFilm();
 __global__ void SetFilm(char * Type, double * Dens, double * Pote);  
 __global__ void SetPlate(char * Type, double * Dens, double * Pote); //更改底板润湿性
 __global__ void SetPorePote(char *Type, double *Pote);
+__global__ void SetHotLiquid(char * Type, double * Dens);
 
 void plotInitField_origin();
 void curveER_Time();
@@ -78,7 +79,7 @@ struct DVector
 
 
 short(*Mxyz)[DXYZ] = NULL;
-double *HostMelo = NULL, *HostDens = NULL, *HostPote = NULL; 
+double *HostMelo = NULL, *HostDens = NULL, *HostPote = NULL, *HostTe = NULL; 
 double Ts[DQ], Mass, ReTau, Tau, Viscosity, Radius, MaxSpeed, Width;
 double Diameter, Gravity;
 double DimLen, DimTime, DimMass, DimF, DimT, DimV, DimA, DimW, DimB;
@@ -307,7 +308,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			double k1 = D(k) - _HotLiquidBottom, k2 = D(k) - _HotLiquidTop;
 			double k3 = D(k) - _ColdLiquidBottom, k4 = D(k) - _ColdLiquidTop;
 
-			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			// Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
 		}
 
 		Te[I] = _Thot;
@@ -564,7 +566,8 @@ __global__ void ChemPotential(char * Type, double * Dens, double * Pote, double 
 		double Den = Dens[I], R0 = 9.7, W0 = 1.5;
 		if (Den > R0) { Den = R0 + (Den - R0) / (D(1) + (Den - R0)*W0); }
 
-		double T = Te[I] * _Tc;
+		//double T = Te[I] * _Tc;
+		double T = _Thot * _Tc;
 
 		Pote[I] = T *log(Den / (D(1) - _B*Den)) - _A / (S2 * 2 * _B)*log((S2 - 1 + _B*Den) / (S2 + 1 - _B*Den)) + T / (D(1) - _B*Den) - _A*Den / (D(1) + _B*Den * 2 - Sq(_B*Den));
 
@@ -624,6 +627,7 @@ void DimConversion(double Length, double MacroLength, double Density, double Mac
 	DimB = 1.0 / Sq(DimTime);
 
 	DimEvaporation =  DimLen / DimTime * 36000 ;  // cm / s *36000 = l /(m^2 * h)
+	DimEvaporation =  DimMass / (Sq(DimLen) * DimTime) * 36000 ;  // g / (cm^2 * s)  / (1.0 g/cm^3) = cm^3 / (cm^2 * s) =
 }
 
 //*************************************************************************************************
@@ -1051,7 +1055,8 @@ void SaveTask()
 	cudaMemcpy(HostPote, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
 
 	CompressField << < Block, Thread >> > (Te, Temp);
-	cudaMemcpy(HostTe, Temp, sizeof)
+	cudaMemcpy(HostTe, Temp, sizeof(double)*LXYZ, cudaMemcpyDeviceToHost);//压缩用这三行
+
 	//cudaMemcpy(HostDens, Dens, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 	//cudaMemcpy(HostPote, Pote, sizeof(double)*DXYZ, cudaMemcpyDeviceToHost);//不压缩用这
 
@@ -1076,7 +1081,7 @@ void SaveTask()
 	tec_file.Zones[0].Data.push_back(TEC_DATA(Mxyz[2]));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(HostDens));
 	tec_file.Zones[0].Data.push_back(TEC_DATA(HostPote));
-	tec_file.Zones[0].Data.push_back(TEC_DATA(HostPote));
+	tec_file.Zones[0].Data.push_back(TEC_DATA(HostTe));
 	tec_file.write_plt(1);
 }
 
@@ -1409,20 +1414,21 @@ int main(int argc, char *argv[])
 	//for( BasePt = 0.01 ;BasePt >= -0.06; BasePt -= 0.005)
 	//for (; No < TasKNum; ++No)
 	{
+		Initialize();
+
 		setPara(LoadInitFlag, true);	//是否通过加载的方式对流场进行初始化
-		//char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
+		// char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
 		char LoadFileName[] = "checkpoint/CheckPoint_WithFilm_50000Step.txt";	//加载的文件名
 		setPara(SaveCheckPointFlag, true);	//保存CheckPoint
 
-		Initialize();
 		//自定义setParameter
 		setPara(FilmThickness, 50);   //最好设置为偶数
 		setPara(HotLiquidThickness, 50);
 		setPara(ColdLiquidThickness, 50);
-		setPara(Thot, 0.61); setPara(Tr, 0.61);
+		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.6);
 		setPara(ShowStep, 1000);
-		setPara(AllStep, 10 * 10000);
+		setPara(AllStep, 18 * 10000);
 		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
 		//setPara(HydroPhobicPt, 0.07);	//疏水 140degree
@@ -1446,12 +1452,10 @@ int main(int argc, char *argv[])
 			//设置膜孔的化学势
 			//SetPorePote << <DimBlock, DimThread >> > (Type, Pote);
 		}
-		else //通过加载的方式进行初始化
+		else //通过加载的方式进行初始化			//对流场的设置进一步处理 
 		{
 			int err_load = LoadCheckPoint(LoadFileName);
 
-			AddFilm();
-			SetPlate<<<DimBlock, DimThread>>>(Type, Dens, Pote);
 
 			if(err_load == 0)
 			{
@@ -1462,6 +1466,10 @@ int main(int argc, char *argv[])
 			{
 				cout << "Load CheckPoint Success!" << endl;
 			}
+
+			// SetHotLiquid<<<DimBlock, DimThread>>>(Type, Dens);
+			// AddFilm();
+			// SetPlate<<<DimBlock, DimThread>>>(Type, Dens, Pote);
 		}
 
 		//显卡内存信息
@@ -1475,7 +1483,13 @@ int main(int argc, char *argv[])
 			plotInitField_origin();		//origin画初始场
 			ShowData();
 
-			if(LoadInitFlag) setPara(NowStep,50000);
+			if(LoadInitFlag) 
+			{	
+				setPara(NowStep,50000);
+				AllStep = 30 * 10000;
+			}
+			else setPara(NowStep,0);
+
 			//演化开始
 			for (; NowStep <= AllStep; ++NowStep)
 			{
@@ -1508,7 +1522,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			if(1 == SaveCheckPointFlag)
+			if(SaveCheckPointFlag && !err_den && !err_distribution)
 			{
 				SaveCheckPoint();
 			}
@@ -1652,6 +1666,7 @@ void CudaInitialize()
 	HostDens = new double[DXYZ];
 	HostMelo = new double[DXYZ];
 	HostPote = new double[DXYZ];
+	HostTe = new double[DXYZ];
 
 
 	//压缩时写法
@@ -1679,6 +1694,7 @@ void CudaFree()
 	delete[] HostDens;
 	delete[] HostMelo;
 	delete[] HostPote;
+	delete[] HostTe;
 
 	cudaFree(Type);
 	cudaFree(Dist);
@@ -1847,18 +1863,16 @@ void CalcMacroCPU()
 		double Den = Dens[I(i, j, k)];
 		Mass += Den; //求总质量
 
-		if( Den!=Den || Den<0 ) 
+		if( Den!=Den || Den<0) 
 		{
 			err_den = true;
 			ofstream errorfile("data/error_Density.txt", ios::app);
-			errorfile << "Density: "<< NowStep << " " << i << " " << j << " " << k << " Den = " << Den << endl;
+			errorfile << NowStep << " " << i << " " << j << " " << k << " " << Den << endl;
 			errorfile.close();
 		}
 
 		for(int f = 0; f < DQ; ++f) 
 		{
-			if(Type[I(i,j,k)] != FLUID) break;
-
 			double t = Dist[f*DXYZ + I(i, j, k)];
             if(t <=0 || t >= 5)
 			{
@@ -2232,7 +2246,7 @@ void MembraneERCalc()
 		ER = TotaldeltaMass / D(NowStep - startStep) / D((DX - 1)*(DY - 1)) ;
 	}
 
-	ER_LMH = ER  * DimEvaporation;
+	ER_LMH = ER  * DimMass /(Sq(DimLen) * DimTime) * 36000;
 	
 
 	if(NowStep >= ShowStep) 
@@ -2278,6 +2292,7 @@ err_type SaveCheckPoint()
 {
 
 	char prefix[] = "./checkpoint";
+	char FieldName[] = "CheckPoint_WithFilm";
 
 	#ifdef WIN32
 		if (_access(prefix , 0) == -1)	//如果文件夹不存在
@@ -2287,8 +2302,9 @@ err_type SaveCheckPoint()
 			mkdir(prefix, 0777);				//则创建
 	#endif
 
+	//保存流场信息
 	char FileName[256];
-	sprintf(FileName, "%s/CheckPoint_WithFilm_%dStep.txt", prefix, NowStep - 1);
+	sprintf(FileName, "%s/%s_%dStep.txt", prefix, FieldName, NowStep - 1);
 	FILE *File = fopen(FileName, "w"); // FILE *File = fopen("checkpoint/CheckPoint.txt", "w"); //重新写入
 	if(File == NULL)
 	{
@@ -2310,12 +2326,28 @@ err_type SaveCheckPoint()
 
 	fclose(File);
 
-	FILE *File2 = fopen("checkpoint/parameters.txt", "w"); 
-	if(File2 == NULL)
+	//保存一个流场切片
+	sprintf(FileName, "%s/%s_%dStep_Field.txt", prefix, FieldName, NowStep - 1);
+	ofstream File2(FileName, ios::out);
+	if(!File2.good())
 	{
-		cout << "parameters.txt open fail!" << endl;
+		cout << "File open fail!" << endl;
 		return 0;
 	}
+	File2 << "i" << "    " << "j" << "    " << "Dens" << endl;
+
+	for(int i = 0; i < DX; ++i)
+	for(int k = 0; k < DZ; ++k)
+	{
+		//Solid
+		if(Type[I(i, DY/2 ,k)] != FLUID)
+			File2 << i << " " << k << " " << endl;
+		else //Fluid
+		{
+			File2 << i << " " << k << " " << Dens[I(i,DY/2 ,k)] << endl;
+		}
+	}
+	File2.close();
 
 	return 1;
 }
@@ -2347,7 +2379,7 @@ err_type LoadCheckPoint(char * FileName)
 	return 1;
 }
 
-//-------------------------------------临时函数----------------------------------------------------------
+//-------------------------------------加载流场后需使用的临时函数----------------------------------------------------------
 //当场完全平衡后加入膜的设置
 void AddFilm()
 {
@@ -2373,6 +2405,19 @@ __global__ void SetFilm(char * Type, double * Dens, double * Pote)
 			Pote[I] = _BasePt;
 		}
 	}
+}
+
+__global__ void SetHotLiquid(char * Type, double * Dens)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if(Type[I] != FLUID) return;
+
+	double k1 = D(k) - _HotLiquidBottom, k2 = D(k) - _HotLiquidTop;
+
+	if(k >= _HotLiquidBottom - 30 && k <= _HotLiquidTop + 30)		
+		//Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width)); 
+		Dens[I] = 0.01348 + (8.667 - 0.01348 )/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width));  //通过上一次演化后的密度来设置
 }
 
 //修改上下底板的润湿性
@@ -2447,16 +2492,17 @@ void plotInitField_origin()
 	}
 
 	//Header
-	file << "i   j   k   Dens" << endl;
+	file << "i" << "    " << "j" << "    " << "Dens" << endl;
 
 	//Solid
-	FOR_iDX_jDY_kDZ
+	for(int i = 0; i < DX; ++i)
+	for(int k = 0; k < DZ; ++k)
 	{
-		if(Type[I(i, j ,k)] != FLUID)
-			file << i << " " << j << " " << k << " " << Pote[I(i,j,k)] + 100 << endl;   
+		if(Type[I(i, DY/2 ,k)] != FLUID)
+			file << i << " " << k << " " << Pote[I(i,DY/2,k)] - 1<< endl;   
 		else //Fluid
 		{
-			file << i << " " << j << " " << k << " " << Dens[I(i,j ,k)] << endl;
+			file << i << " " << k << " " << Dens[I(i,DY/2 ,k)] << endl;
 		}
 	}
 }
