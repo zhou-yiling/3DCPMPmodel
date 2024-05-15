@@ -55,6 +55,14 @@ __global__ void SetFilm(char * Type, double * Dens, double * Pote);
 __global__ void SetPlate(char * Type, double * Dens, double * Pote); //更改底板润湿性
 __global__ void SetPorePote(char *Type, double *Pote);
 __global__ void SetHotLiquid(char * Type, double * Dens);
+__global__ void SetFilmLowerSurfacePt(char * Type, double * Pote);
+__global__ void SetFilmLowerSurfacePt1(char * Type, double * Pote);
+__global__ void SetFilmLowerSurfacePt2(char * Type, double * Pote);
+
+__global__ void Plan2_SetFilmLowerSurfacePt1(char * Type, double * Pote);
+__global__ void Plan2_SetFilmLowerSurfacePt2(char * Type, double * Pote);
+__global__ void Plan2_SetFilmLowerSurfacePt3(char * Type, double * Pote);
+__global__ void Plan2_SetFilmLowerSurfacePt4(char * Type, double * Pote);
 
 void plotInitField_origin();
 void curveER_Time();
@@ -153,7 +161,7 @@ void CudaInitialize();
 void CudaFree();
 
 err_type LoadCheckPoint(char * FileName);
-err_type SaveCheckPoint();
+err_type SaveCheckPoint(string TestName);
 
 //*************************************************************************************************
 void ContactAngle(bool side, int tier);
@@ -274,13 +282,15 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 		{
 			Type[I] = SOLID;
 			Dens[I] = 0;
-			Pote[I] = _HydroPhobicPt;  //亲水
+			Pote[I] = _HydroPhobicPt;  //疏水
+			// Pote[I] = _HydroPhilicPt;  //亲水
 		}
 		else if ( k >DZ - 4) //设置顶板;
 		{
 			Type[I] = SOLID;
 			Dens[I] = 0;
-			Pote[I] = _HydroPhilicPt;  //亲水
+			// Pote[I] = _HydroPhilicPt;  //亲水
+			Pote[I] = _HydroPhobicPt;  //疏水
 		}
 		else if ( k >= _PoreBottom && k <= _PoreTop)		//设置膜和孔
 		{
@@ -293,7 +303,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			{
 				Type[I] = SOLID;
 				Dens[I] = 0;
-				Pote[I] = _HydroPhilicPt;
+				// Pote[I] = _HydroPhilicPt;
+				Pote[I] = _HydroPhobicPt;
 			}
 		}
 		else 						//设置液体
@@ -309,6 +320,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			double k3 = D(k) - _ColdLiquidBottom, k4 = D(k) - _ColdLiquidTop;
 
 			Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width) + tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
+			// Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width));
+			// Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k3 * 2 / _Width) - tanh(k4 * 2 / _Width));
 		}
 
 		Te[I] = _Thot;
@@ -626,6 +639,10 @@ void DimConversion(double Length, double MacroLength, double Density, double Mac
 	DimB = 1.0 / Sq(DimTime);
 
 	DimEvaporation =  DimLen / DimTime * 36000 ;  // cm / s *36000 = l /(m^2 * h)
+	cout << "DimEvaporation: " <<  DimEvaporation << endl;
+	DimEvaporation = DimMass / DimLen / DimLen / DimTime * 36000;
+	cout << "DimEvaporation: " <<  DimEvaporation << endl;
+
 	//DimEvaporation =  DimMass / (Sq(DimLen) * DimTime) * 36000 ;  // g / (cm^2 * s)  / (1.0 g/cm^3) = cm^3 / (cm^2 * s) =
 }
 
@@ -1423,7 +1440,7 @@ int main(int argc, char *argv[])
 	cudaSetDevice(DeviceNo); //cudaSetDevice(1);
 	cout << "  Now is running on GPU device " << DeviceNo << endl;
 
-	char TestName[] = "" ;	//3D/2D  
+	string TestName = "2D_Film" ;	//3D/2D  
 	No = 0;
 	
 	//for( BasePt = 0.01 ;BasePt >= -0.06; BasePt -= 0.005)
@@ -1433,22 +1450,23 @@ int main(int argc, char *argv[])
 
 		setPara(LoadInitFlag, false);	//是否通过加载的方式对流场进行初始化
 		// char LoadFileName[] = "checkpoint/CheckPoint_800000Step.txt";	//加载的文件名
-		char LoadFileName[] = "checkpoint/CheckPoint_WithFilm_50000Step.txt";	//加载的文件名
+		char LoadFileName[] = "";	//加载的文件名
 		setPara(SaveCheckPointFlag, true);	//保存CheckPoint
 
 		//自定义setParameter
 		setPara(FilmThickness, 50);   //最好设置为偶数
-		setPara(HotLiquidThickness, 50);
+		setPara(HotLiquidThickness, 60);
 		setPara(ColdLiquidThickness, 50);
 		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.6);
-		setPara(ShowStep, 1000);
-		setPara(AllStep, 20 * 10000);
+		setPara(ShowStep, 10000);
+		setPara(AllStep, 100 * 10000);
 		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
 		//setPara(HydroPhobicPt, 0.07);	//疏水 140degree
 		//setPara(HydroPhobicPt, 0.05);	//疏水 120degree
-		setPara(HydroPhobicPt, 0.035);	//疏水 110degree
+		// setPara(HydroPhobicPt, 0.035);	//疏水 110degree
+		setPara(HydroPhobicPt, 0.010725);	// 90degree (0.68)
 
 		SetMultiphase();
 		MembraneParaInit();
@@ -1465,7 +1483,7 @@ int main(int argc, char *argv[])
 			ChemBoundaryTag << <DimBlock, DimThread >> > (Type, LEVEL3, LEVEL2);
 
 			//设置膜孔的化学势
-			SetPorePote << <DimBlock, DimThread >> > (Type, Pote);
+			// SetPorePote << <DimBlock, DimThread >> > (Type, Pote);
 		}
 		else //通过加载的方式进行初始化			//对流场的设置进一步处理 
 		{
@@ -1517,6 +1535,16 @@ int main(int argc, char *argv[])
 					//ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL3, LEVEL2);		//五点则只需算两层
 				
 					ChemPotential << <DimBlock, DimThread >> > (Type, Dens, Pote, Te);
+
+					// SetFilmLowerSurfacePt << <DimBlock, DimThread >> > (Type, Pote);
+
+					// SetFilmLowerSurfacePt1 << <DimBlock, DimThread >> > (Type, Pote);
+					// SetFilmLowerSurfacePt2 << <DimBlock, DimThread >> > (Type, Pote);
+
+					Plan2_SetFilmLowerSurfacePt1 << <DimBlock, DimThread >> > (Type, Pote);
+					Plan2_SetFilmLowerSurfacePt2 << <DimBlock, DimThread >> > (Type, Pote);
+					Plan2_SetFilmLowerSurfacePt3 << <DimBlock, DimThread >> > (Type, Pote);
+					Plan2_SetFilmLowerSurfacePt4 << <DimBlock, DimThread >> > (Type, Pote);
 				}
 
 				NonidealForce << <DimBlock, DimThread >> > (Type, Dens, Pote, Fx, Fy, Fz);
@@ -1533,13 +1561,13 @@ int main(int argc, char *argv[])
 					CalcMacroCPU();
 					MembraneERCalc();
 					ShowData();
-					SaveTask();					
+					//SaveTask();					
 				}
 			}
 
 			if(SaveCheckPointFlag && !err_den && !err_distribution)
 			{
-				SaveCheckPoint();
+				SaveCheckPoint(TestName);
 			}
 		}
 		CudaFree();
@@ -2303,11 +2331,11 @@ __global__ void Temperature(char *Type, double *Den, double *Te, double *MVx, do
     }
 }
 
-err_type SaveCheckPoint()
+err_type SaveCheckPoint(const string TestName)
 {
 
 	char prefix[] = "./checkpoint";
-	char FieldName[] = "CheckPoint_WithFilm";
+	string FieldName = "CheckPoint_" + TestName;
 
 	#ifdef WIN32
 		if (_access(prefix , 0) == -1)	//如果文件夹不存在
@@ -2319,7 +2347,7 @@ err_type SaveCheckPoint()
 
 	//保存流场信息
 	char FileName[256];
-	sprintf(FileName, "%s/%s_%dStep.txt", prefix, FieldName, NowStep - 1);
+	sprintf(FileName, "%s/%s_%dStep.checkpoint", prefix, FieldName.c_str(), (NowStep - 1));
 	FILE *File = fopen(FileName, "w"); // FILE *File = fopen("checkpoint/CheckPoint.txt", "w"); //重新写入
 	if(File == NULL)
 	{
@@ -2342,24 +2370,24 @@ err_type SaveCheckPoint()
 	fclose(File);
 
 	//保存一个流场切片
-	sprintf(FileName, "%s/%s_%dStep_Field.txt", prefix, FieldName, NowStep - 1);
+	sprintf(FileName, "%s/%s_%dStep_Field.txt", prefix, FieldName.c_str(), NowStep - 1);
 	ofstream File2(FileName, ios::out);
 	if(!File2.good())
 	{
 		cout << "File open fail!" << endl;
 		return 0;
 	}
-	File2 << "i" << "    " << "j" << "    " << "Dens" << endl;
+	File2 << "X" << "	" << "Y" << "	" << "Denstity"  << "	" << "Potential" << endl;
 
 	for(int i = 0; i < DX; ++i)
 	for(int k = 0; k < DZ; ++k)
 	{
 		//Solid
 		if(Type[I(i, DY/2 ,k)] != FLUID)
-			File2 << i << " " << k << " " << endl;
+			File2 << i << "	" << k << "	" << -1 << "	" << Pote[I(i,DY/2 ,k)] << endl;
 		else //Fluid
 		{
-			File2 << i << " " << k << " " << Dens[I(i,DY/2 ,k)] << endl;
+			File2 << i << "	" << k << "	" << Dens[I(i,DY/2 ,k)]  << "	" << Pote[I(i,DY/2 ,k)] << endl;
 		}
 	}
 	File2.close();
@@ -2432,7 +2460,7 @@ __global__ void SetHotLiquid(char * Type, double * Dens)
 
 	if(k >= _HotLiquidBottom - 30 && k <= _HotLiquidTop + 30)		
 		//Dens[I] = _DenG + (_DenL-_DenG)/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width)); 
-		Dens[I] = 0.01348 + (8.667 - 0.01348 )/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width));  //通过上一次演化后的密度来设置
+		Dens[I] = 0.01348 + (8.667 - 0.01348 )/2 * (tanh(k1 * 2 / _Width) - tanh(k2 * 2 / _Width));  //通过上一次演化后的实际测量的密度来设置
 }
 
 //修改上下底板的润湿性
@@ -2455,7 +2483,7 @@ void curveER_Time()
 	}
 	if(NowStep == 0)
 	{
-		File << "NowStep" << "    ER" << "    ER_LMH" << "    ER_inst" << endl;
+		File << "TimeStep" << "    EvaporationRate(lattice)" << "    TotalEvaporationRate(Lm^-2h^-1)" << "    InstantEvaporationRate(Lm^-2h^-1)" << endl;
 	}
 
 	File << NowStep << "    " << ER << "    " << ER_LMH << "    " << ER_inst << endl;
@@ -2507,18 +2535,160 @@ void plotInitField_origin()
 	}
 
 	//Header
-	file << "i" << "    " << "j" << "    " << "Dens" << endl;
+	file << "X" << "    " << "Y" << "    " << "Density" << "	" << "ChemicalPotential" << endl;
 
 	//Solid
 	for(int i = 0; i < DX; ++i)
 	for(int k = 0; k < DZ; ++k)
 	{
 		if(Type[I(i, DY/2 ,k)] != FLUID)
-			file << i << " " << k << " " << Pote[I(i,DY/2,k)] - 1<< endl;   
+			file << i << " " << k << " " << Pote[I(i,DY/2,k)] - 1<< "	" << Pote[I(i,DY/2,k)] << endl;
 		else //Fluid
 		{
-			file << i << " " << k << " " << Dens[I(i,DY/2 ,k)] << endl;
+			file << i << " " << k << " " << Dens[I(i,DY/2 ,k)] << "	" << Pote[I(i,DY/2 ,k)] << endl;
 		}
 	}
 }
 
+__global__ void SetFilmLowerSurfacePt(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+	if(Type[I] == FLUID) return;
+
+	if(k >= _PoreBottom  && k <= _PoreTop)
+	{
+		Pote[I] =  Pote[I(DX/2, j,k)];
+	}
+}
+
+__global__ void SetFilmLowerSurfacePt1(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if ( k >= _PoreBottom  && k <= _PoreTop)
+	{
+		if(Type[I] != LEVEL1)  return ;
+        double avg_pt= 0;
+        double w = 0;
+        for (int f = 1; f < DQ; ++f) 
+        {
+            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+
+            if(Type [pp] == FLUID)
+            {
+               avg_pt += Alpha[f] * Pote[pp];
+               w += Alpha[f];
+            }
+        }
+        Pote[I] = avg_pt/ w;
+	}
+}
+
+__global__ void SetFilmLowerSurfacePt2(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if ( k >= _PoreBottom  && k <= _PoreTop)
+	{
+		if(Type[I] != LEVEL2)  return ;
+
+        double avg_pt= 0;
+        double w = 0;
+
+        for (int f = 1; f < DQ; ++f) 
+        {
+            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+
+            if(Type [pp] == LEVEL1)
+            {
+               avg_pt += Alpha[f] * Pote[pp];
+               w += Alpha[f];
+            }
+        }
+        Pote[I] = avg_pt/ w;
+	}
+}
+
+__global__ void Plan2_SetFilmLowerSurfacePt1(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if ( k == _PoreBottom && Type[I] != FLUID) 
+		Pote[I] = Pote[I(i,j, k-1)];
+
+	if ( k == _PoreTop && Type[I] != FLUID) 
+		Pote[I] = Pote[I(i,j, k+1)];
+}
+
+__global__ void Plan2_SetFilmLowerSurfacePt2(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+
+	if ( k == _PoreBottom + 1 && Type[I] != FLUID) 
+		Pote[I] = Pote[I(i,j, k-1)];
+	
+	if ( k == _PoreTop - 1 && Type[I] != FLUID) 
+		Pote[I] = Pote[I(i,j, k+1)];
+}
+
+
+__global__ void Plan2_SetFilmLowerSurfacePt3(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+	if(k < _PoreTop - 1 && k > _PoreBottom + 1) 
+	{
+		if(Type[I] != LEVEL1)  return;
+
+        double avg_pt= 0;
+        double w = 0;
+
+        for (int f = 1; f < DQ; ++f) 
+        {
+            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+
+            if(Type [pp] == FLUID)
+            {
+               avg_pt += Alpha[f] * Pote[pp];
+               w += Alpha[f];
+            }
+        }
+        Pote[I] = avg_pt/ w;
+	}
+}
+
+__global__ void Plan2_SetFilmLowerSurfacePt4(char * Type, double * Pote)
+{
+	GridIndex;  LineIndex; if(I >= DXYZ) return;
+	if(k < _PoreTop - 1 && k > _PoreBottom + 1) 
+	{
+		if(Type[I] != LEVEL2)  return;
+
+
+        for (int f = 1; f < 3; ++f)   //只考虑x方向
+        {
+            int xoffset = (i + Ex[f] + DX) % DX , yoffset = (j + Ey[f] + DY) % DY, zoffset = (k + Ez[f] + DZ) % DZ;
+            const int pp =  xoffset * DY * DZ + yoffset * DZ + zoffset;
+
+            if(Type [pp] == LEVEL1)
+            {
+				if(i < DX/2)
+				{
+					for(int idx_i = 0; idx_i <= i; ++idx_i)
+					{
+						Pote[I(idx_i, j, k)] = Pote[pp];
+					}
+				}
+				else
+				{
+					for(int idx_i = i; idx_i < DX; ++idx_i)
+					{
+						Pote[I(idx_i, j, k)] = Pote[pp];
+					}
+				}
+            }
+        }
+	}
+}
