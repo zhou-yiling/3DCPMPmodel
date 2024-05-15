@@ -14,6 +14,7 @@
 # 指定文件
 data
 flow
+checkpoint
 !CoCurve_CSE_2.txt
 !CoCurve_PRM_2.txt
 !CoCurve_RRW_2.txt
