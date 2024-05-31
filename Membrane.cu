@@ -378,25 +378,25 @@ __device__ void LocalCollideMrt(double * Dens, double * Dist, const double Vx, c
 	Qp[15] = -_K1 * Gradx7(Dens) * Gradz7(Dens);
 
 	// Ammar_2017_JCP
-	Meq[0] = Den; 													//rho
-	Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vy*Vy + Vz*Vz));			//e
-	Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vy*Vy + Vz*Vz));		//epsilon
-	Meq[3] = Den * Vx;									// j_x
-	Meq[4] = Den * Vx * -2 / 3;							// q_x
-	Meq[5] = Den * Vy;									// j_y	
-	Meq[6] = Den * Vy * -2 / 3;							// q_y	
-	Meq[7] = Den * Vz; 									// j_z
-	Meq[8] = Den * Vz * -2 / 3;							// q_z
-	Meq[9] = Den * (Vx*Vx * 2 - Vy*Vy - Vz*Vz);			//	3p_xx
-	Meq[10] = Den * (Vx*Vx * 2 - Vy*Vy - Vz*Vz) / -2; 	// 3PI_xx
-	Meq[11] = Den * (Vy*Vy - Vz*Vz);					// p_ww
-	Meq[12] = Den * (Vy*Vy - Vz*Vz) / -2;				// PI_ww
-	Meq[13] = Den * Vx * Vy;							//p_xy
-	Meq[14] = Den * Vy * Vz;							//p_yz
-	Meq[15] = Den * Vx * Vz;							//p_xz
-	Meq[16] = 0;										//\phi _x
-	Meq[17] = 0;										//\phi _y
-	Meq[18] = 0;										//\phi _z
+	// Meq[0] = Den; 													//rho
+	// Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vy*Vy + Vz*Vz));			//e
+	// Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vy*Vy + Vz*Vz));		//epsilon
+	// Meq[3] = Den * Vx;									// j_x
+	// Meq[4] = Den * Vx * -2 / 3;							// q_x
+	// Meq[5] = Den * Vy;									// j_y	
+	// Meq[6] = Den * Vy * -2 / 3;							// q_y	
+	// Meq[7] = Den * Vz; 									// j_z
+	// Meq[8] = Den * Vz * -2 / 3;							// q_z
+	// Meq[9] = Den * (Vx*Vx * 2 - Vy*Vy - Vz*Vz);			//	3p_xx
+	// Meq[10] = Den * (Vx*Vx * 2 - Vy*Vy - Vz*Vz) / -2; 	// 3PI_xx
+	// Meq[11] = Den * (Vy*Vy - Vz*Vz);					// p_ww
+	// Meq[12] = Den * (Vy*Vy - Vz*Vz) / -2;				// PI_ww
+	// Meq[13] = Den * Vx * Vy;							//p_xy
+	// Meq[14] = Den * Vy * Vz;							//p_yz
+	// Meq[15] = Den * Vx * Vz;							//p_xz
+	// Meq[16] = 0;										//\phi _x
+	// Meq[17] = 0;										//\phi _y
+	// Meq[18] = 0;										//\phi _z
 
 	//Lallemand 2003  D3Q19  with T evolution
 	// Meq[0] = Den; 													//rho
@@ -420,30 +420,30 @@ __device__ void LocalCollideMrt(double * Dens, double * Dist, const double Vx, c
 	// Meq[17] = 0;										//\phi _y
 	// Meq[18] = 0;										//\phi _z
 
-	// //Vy = 0 equilibrium moments
-	// Meq[0] = Den; 													//rho
-	// Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vz*Vz));			//e
-    // // Meq[1] = Den * (-2.0 + 3.0 * (Sq(Vx) + Sq(Vy)));  
-	// Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vz*Vz));		//epsilon
-	// // Meq[2] = Den * (1.00 - 3.0 * (Sq(Vx) + Sq(Vy)));  
-	// Meq[3] = Den * Vx;									// j_x
-	// Meq[4] = Den * Vx * -2 / 3;							// q_x
-    // // Meq[4] = Den * Vx * -1;     
-	// Meq[5] = 0;//Den * Vy;									// j_y	
-	// Meq[6] = 0;//Den * Vy * -2 / 3;							// q_y	
-	// Meq[7] = Den * Vz; 									// j_z
-	// Meq[8] = Den * Vz * -2 / 3;							// q_z
-    // // Meq[8] = Den * Vz * -1;     
-	// Meq[9] = Den * (Vx*Vx - Vz*Vz);			//	3p_xx
-	// Meq[10] = Den * (Vx*Vx * 2 - Vz*Vz) / -2; 	// 3PI_xx
-	// Meq[11] = Den * (0 - Vz*Vz);					// p_ww
-	// Meq[12] = Den * (0 - Vz*Vz) / -2;				// PI_ww
-	// Meq[13] = 0;//Den * Vx * Vy;							//p_xy
-	// Meq[14] = 0;//Den * Vy * Vz;							//p_yz
-	// Meq[15] = Den * Vx * Vz;							//p_xz
-	// Meq[16] = 0;										//\phi _x
-	// Meq[17] = 0;										//\phi _y
-	// Meq[18] = 0;										//\phi _z
+	//Vy = 0 equilibrium moments
+	Meq[0] = Den; 													//rho
+	Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vz*Vz));			//e
+    // Meq[1] = Den * (-2.0 + 3.0 * (Sq(Vx) + Sq(Vy)));  
+	Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vz*Vz));		//epsilon
+	// Meq[2] = Den * (1.00 - 3.0 * (Sq(Vx) + Sq(Vy)));  
+	Meq[3] = Den * Vx;									// j_x
+	Meq[4] = Den * Vx * -2 / 3;							// q_x
+    // Meq[4] = Den * Vx * -1;     
+	Meq[5] = 0;//Den * Vy;									// j_y	
+	Meq[6] = 0;//Den * Vy * -2 / 3;							// q_y	
+	Meq[7] = Den * Vz; 									// j_z
+	Meq[8] = Den * Vz * -2 / 3;							// q_z
+    // Meq[8] = Den * Vz * -1;     
+	Meq[9] = Den * (Vx*Vx - Vz*Vz);			//	3p_xx
+	Meq[10] = Den * (Vx*Vx * 2 - Vz*Vz) / -2; 	// 3PI_xx
+	Meq[11] = Den * (0 - Vz*Vz);					// p_ww
+	Meq[12] = Den * (0 - Vz*Vz) / -2;				// PI_ww
+	Meq[13] = 0;//Den * Vx * Vy;							//p_xy
+	Meq[14] = 0;//Den * Vy * Vz;							//p_yz
+	Meq[15] = Den * Vx * Vz;							//p_xz
+	Meq[16] = 0;										//\phi _x
+	Meq[17] = 0;										//\phi _y
+	Meq[18] = 0;										//\phi _z
 
 
 	//D2Q9
