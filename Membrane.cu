@@ -289,8 +289,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 			Dens[I] = 0;
 			// Pote[I] = _HydroPhilicPt;  //亲水
 			// Pote[I] = _HydroPhobicPt;  //疏水
-			// Pote[I] = 0.010725;  //90
-			Pote[I] = -0.04;  //50
+			Pote[I] = 0.010725;  //90
+			// Pote[I] = -0.04;  //50
 		}
 		else if ( k >= _PoreBottom && k <= _PoreTop)		//设置膜和孔
 		{
@@ -305,7 +305,8 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 				Dens[I] = 0;
 				// Pote[I] = _HydroPhilicPt;
 				// Pote[I] = _HydroPhobicPt;
-				Pote[I] = 0.010725;
+				// Pote[I] = 0.010725;
+				Pote[I] = -0.01;
 			}
 		}
 		else 						//设置液体
@@ -326,10 +327,10 @@ __global__ void SetFlowField(char* Type, double* Dens, double* Pote, double* Dis
 		}
 
 		//温度场初始化;
-		Te[I] = _Thot;  //全流场恒温实验 
+		// Te[I] = _Thot;  //全流场恒温实验 
 
-		// if(k <= _PoreTop)  Te[I] = _Thot;		//以膜上表面为界，上下形成温差
-		// else Te[I] = _Tcold;
+		if(k <= _PoreTop)  Te[I] = _Thot;		//以膜上表面为界，上下形成温差
+		else Te[I] = _Tcold;
 #endif 
 
 	for (int f = 0; f<DQ; ++f)
@@ -408,29 +409,29 @@ __device__ void LocalCollideMrt(double * Dens, double * Dist, const double Vx, c
 	// Meq[18] = 0;										//\phi _z
 
 	// //Vy = 0 equilibrium moments
-	// Meq[0] = Den; 													//rho
-	// Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vz*Vz));			//e
-    // // Meq[1] = Den * (-2.0 + 3.0 * (Sq(Vx) + Sq(Vy)));  
-	// Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vz*Vz));		//epsilon
-	// // Meq[2] = Den * (1.00 - 3.0 * (Sq(Vx) + Sq(Vy)));  
-	// Meq[3] = Den * Vx;									// j_x
-	// Meq[4] = Den * Vx * -2 / 3;							// q_x
-    // // Meq[4] = Den * Vx * -1;     
-	// Meq[5] = 0;//Den * Vy;									// j_y	
-	// Meq[6] = 0;//Den * Vy * -2 / 3;							// q_y	
-	// Meq[7] = Den * Vz; 									// j_z
-	// Meq[8] = Den * Vz * -2 / 3;							// q_z
-    // // Meq[8] = Den * Vz * -1;     
-	// Meq[9] = Den * (Vx*Vx - Vz*Vz);			//	3p_xx
-	// Meq[10] = Den * (Vx*Vx * 2 - Vz*Vz) / -2; 	// 3PI_xx
-	// Meq[11] = Den * (0 - Vz*Vz);					// p_ww
-	// Meq[12] = Den * (0 - Vz*Vz) / -2;				// PI_ww
-	// Meq[13] = 0;//Den * Vx * Vy;							//p_xy
-	// Meq[14] = 0;//Den * Vy * Vz;							//p_yz
-	// Meq[15] = Den * Vx * Vz;							//p_xz
-	// Meq[16] = 0;										//\phi _x
-	// Meq[17] = 0;										//\phi _y
-	// Meq[18] = 0;										//\phi _z
+	Meq[0] = Den; 													//rho
+	Meq[1] = Den * (-11.0 + 19.0*(Vx*Vx + Vz*Vz));			//e
+    // Meq[1] = Den * (-2.0 + 3.0 * (Sq(Vx) + Sq(Vy)));  
+	Meq[2] = Den * (3.0 - 11.0 / 2 * (Vx*Vx + Vz*Vz));		//epsilon
+	// Meq[2] = Den * (1.00 - 3.0 * (Sq(Vx) + Sq(Vy)));  
+	Meq[3] = Den * Vx;									// j_x
+	Meq[4] = Den * Vx * -2 / 3;							// q_x
+    // Meq[4] = Den * Vx * -1;     
+	Meq[5] = 0;//Den * Vy;									// j_y	
+	Meq[6] = 0;//Den * Vy * -2 / 3;							// q_y	
+	Meq[7] = Den * Vz; 									// j_z
+	Meq[8] = Den * Vz * -2 / 3;							// q_z
+    // Meq[8] = Den * Vz * -1;     
+	Meq[9] = Den * (Vx*Vx - Vz*Vz);			//	3p_xx
+	Meq[10] = Den * (Vx*Vx * 2 - Vz*Vz) / -2; 	// 3PI_xx
+	Meq[11] = Den * (0 - Vz*Vz);					// p_ww
+	Meq[12] = Den * (0 - Vz*Vz) / -2;				// PI_ww
+	Meq[13] = 0;//Den * Vx * Vy;							//p_xy
+	Meq[14] = 0;//Den * Vy * Vz;							//p_yz
+	Meq[15] = Den * Vx * Vz;							//p_xz
+	Meq[16] = 0;										//\phi _x
+	Meq[17] = 0;										//\phi _y
+	Meq[18] = 0;										//\phi _z
 
 
 	//D2Q9
@@ -611,8 +612,9 @@ __global__ void SetPorePote(char *Type, double *Pote)
 		if(k >= _PoreBottom && k <= _PoreTop - 3)
 		{
 			// Pote[I] =  _HydroPhobicPt;
-			Pote[I] =  0.02; // 97degree
-			Pote[I] = 0.035; // 109degree
+			// Pote[I] =  0.02; // 97degree
+			// Pote[I] = 0.035; // 109degree
+			Pote[I] = 0.07; // 
 		}
 	}
 }
@@ -1518,7 +1520,7 @@ int main(int argc, char *argv[])
 		setPara(ColdLiquidThickness, 50);
 		setPara(Thot, 0.68); setPara(Tr, 0.68);
 		setPara(Tcold, 0.62);
-		setPara(ShowStep, 10000);
+		setPara(ShowStep, 1000);
 		setPara(AllStep, 20 * 10000);
 		setPara(BasePt,0.01);          // 90degree  0.01(Tr0.68)
 		setPara(HydroPhilicPt, -0.04);   //亲水 50degree
@@ -1592,8 +1594,8 @@ int main(int argc, char *argv[])
 			{
 				//dim3  Block(DX, 1, 1), Thread(DY, 1, 1);
 				{
-					// TemperatureGradient<<<DimBlock, DimThread>>>(Type,  Te, Tx ,  Ty ,  Tz, Td,  MVx,  MVy,  MVz , DVx,  DVy,  DVz ) ;
-					// Temperature<<<DimBlock, DimThread>>>(Type,  Dens,  Te,  MVx,  MVy,  MVz , Tx ,  Ty ,  Tz, Td, DVx,  DVy,  DVz ) ;
+					TemperatureGradient<<<DimBlock, DimThread>>>(Type,  Te, Tx ,  Ty ,  Tz, Td,  MVx,  MVy,  MVz , DVx,  DVy,  DVz ) ;
+					Temperature<<<DimBlock, DimThread>>>(Type,  Dens,  Te,  MVx,  MVy,  MVz , Tx ,  Ty ,  Tz, Td, DVx,  DVy,  DVz ) ;
 					//计算化学势边界
 					ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL1, FLUID);
 					ChemBoundaryComplex<<< DimBlock, DimThread >> > (Type, Dens, LEVEL2, LEVEL1);	//五点则只需算两层
